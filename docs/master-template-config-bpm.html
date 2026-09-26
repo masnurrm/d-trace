@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>D-TRACE - Master Template Config</title>
+  <style>
+    :root{
+      --bg:#f4f7fb;
+      --surface:#ffffff;
+      --line:#d9e2ef;
+      --text:#172033;
+      --muted:#667085;
+      --primary:#2563eb;
+      --primary-2:#1d4ed8;
+      --primary-soft:#eff6ff;
+      --nav:#12345a;
+      --yellow:#fff58b;
+      --section:#f3f4f6;
+      --success:#16a34a;
+      --danger:#dc2626;
+      --shadow:0 10px 28px rgba(16,24,40,.08);
+    }
+
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:var(--bg)}
+    body{min-width:1180px}
+
+    .app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+
+    .sidebar{
+      background:linear-gradient(180deg,#143b65 0%,#102e50 100%);
+      color:#fff;
+      padding:22px 14px;
+      position:sticky;top:0;height:100vh;
+    }
+    .brand{font-size:24px;font-weight:800;letter-spacing:.4px;margin:0 8px 28px}
+    .brand small{display:block;font-size:11px;font-weight:500;color:#b8cae2;margin-top:4px}
+    .nav-section{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#8fb0d2;margin:18px 10px 8px}
+    .nav-item{padding:10px 12px;border-radius:8px;margin:4px 0;color:#dbeafe;font-size:13px}
+    .nav-item.active{background:#2563eb;color:#fff;font-weight:700}
+    .nav-item.sub{padding-left:28px;font-size:12px}
+
+    .main{padding:22px 24px 40px}
+    .breadcrumb{font-size:12px;color:#6b7280;margin-bottom:8px}
+    .page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:18px}
+    .page-head h1{margin:0 0 5px;font-size:26px}
+    .page-head p{margin:0;color:var(--muted);font-size:13px}
+    .top-actions{display:flex;gap:8px;align-items:center}
+
+    button,.btn{
+      border:1px solid var(--line);
+      background:#fff;color:var(--text);
+      border-radius:8px;padding:9px 13px;
+      font-size:12px;font-weight:700;cursor:pointer;
+    }
+    button:hover{background:#f8fafc}
+    button.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    button.primary:hover{background:var(--primary-2)}
+    button.danger{color:var(--danger);border-color:#fecaca;background:#fff}
+    button.ghost{border-color:transparent;background:transparent;padding:6px 8px}
+
+    .workspace{
+      display:grid;
+      grid-template-columns:300px minmax(600px,1fr) 330px;
+      gap:16px;
+      align-items:start;
+    }
+
+    .card{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:12px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .card-head{
+      min-height:52px;padding:12px 14px;border-bottom:1px solid var(--line);
+      display:flex;align-items:center;justify-content:space-between;gap:8px;
+    }
+    .card-head h2{margin:0;font-size:14px}
+    .card-head small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+    .card-body{padding:14px}
+
+    .field{margin-bottom:13px}
+    .field label{display:block;font-size:11px;font-weight:700;margin-bottom:6px;color:#344054}
+    input,textarea,select{
+      width:100%;border:1px solid #cfd8e5;border-radius:7px;padding:9px 10px;
+      font:inherit;font-size:12px;background:#fff;color:#111827;
+    }
+    textarea{min-height:86px;resize:vertical}
+    input:focus,textarea:focus,select:focus{outline:2px solid #bfdbfe;border-color:#60a5fa}
+    .row-2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+    .switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0}
+    .switch-row span{font-size:12px}
+    .switch{position:relative;width:38px;height:22px;background:#cbd5e1;border-radius:999px;cursor:pointer;flex:none}
+    .switch:after{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+    .switch.on{background:#2563eb}
+    .switch.on:after{left:19px}
+
+    .section-list{display:flex;flex-direction:column;gap:7px}
+    .section-item{
+      border:1px solid #e2e8f0;background:#fff;border-radius:8px;
+      padding:10px;cursor:pointer;display:grid;grid-template-columns:24px 1fr auto;gap:8px;align-items:center;
+    }
+    .section-item:hover{border-color:#93c5fd;background:#f8fbff}
+    .section-item.active{border-color:#2563eb;background:#eff6ff}
+    .drag{color:#94a3b8;font-size:16px}
+    .section-title{font-size:12px;font-weight:700}
+    .section-meta{font-size:10px;color:#64748b;margin-top:2px}
+    .badge{display:inline-flex;align-items:center;border-radius:999px;padding:3px 7px;font-size:9px;font-weight:800;background:#eef2ff;color:#4338ca}
+    .list-actions{display:flex;gap:4px;margin-top:12px}
+
+    .preview-wrap{background:#eef2f7;padding:20px;min-height:790px}
+    .document{
+      width:100%;max-width:810px;margin:0 auto;background:#fff;
+      padding:26px;box-shadow:0 8px 24px rgba(15,23,42,.12);
+      min-height:1100px;
+    }
+    .doc-conf{text-align:center;font-size:10px;font-weight:800;margin-bottom:4px}
+    .doc-table{width:100%;border-collapse:collapse}
+    .doc-table td,.doc-table th{border:1px solid #222;padding:5px 7px;font-size:10px;vertical-align:top}
+    .doc-top td{text-align:center;font-weight:800;height:52px;vertical-align:middle;font-size:12px}
+    .doc-logo{font-family:Georgia,serif;font-size:28px!important;color:#7a2048}
+    .doc-main-title{background:var(--yellow);border:1px solid #222;padding:6px;text-align:center;font-weight:900;font-size:13px;margin-top:7px}
+    .doc-title{border:1px solid #222;border-top:0;padding:6px;font-size:10px}
+    .doc-section{border:1px solid #222;margin-top:7px}
+    .doc-section-head{background:#efefef;border-bottom:1px solid #222;padding:5px 7px;font-size:10px;font-weight:800}
+    .doc-section-body{padding:7px;min-height:40px;font-size:10px;line-height:1.4;white-space:pre-wrap}
+    .doc-flow{padding:10px;display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap}
+    .doc-flow span.step{background:#eff6ff;border:1px solid #93c5fd;color:#1d4ed8;border-radius:5px;padding:6px 8px;font-size:9px;font-weight:700}
+    .doc-flow span.arrow{font-size:11px;color:#64748b}
+    .doc-approval{width:100%;border-collapse:collapse;margin-top:7px}
+    .doc-approval td{border:1px solid #222;height:90px;width:33.33%;font-size:9px;padding:6px;vertical-align:top}
+    .doc-footer{text-align:center;font-size:9px;color:#555;margin-top:10px}
+
+    .selected-outline{outline:2px solid #2563eb;outline-offset:2px}
+    .hint{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:8px;padding:10px;font-size:11px;line-height:1.5;margin-bottom:12px}
+    .binding{display:flex;align-items:center;gap:7px;padding:8px;border:1px dashed #bfdbfe;background:#f8fbff;border-radius:7px;font-size:11px;margin-top:5px}
+    .binding code{font-size:10px;color:#1d4ed8}
+
+    .json-box{background:#0f172a;color:#dbeafe;border-radius:8px;padding:10px;font-size:10px;min-height:120px;overflow:auto;white-space:pre-wrap}
+    .divider{height:1px;background:#e5e7eb;margin:14px 0}
+    .mini-help{font-size:10px;color:#667085;line-height:1.5}
+    .status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:#16a34a;margin-right:5px}
+    .save-state{font-size:11px;color:#475467}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">D-TRACE<small>Document Governance</small></div>
+    <div class="nav-item">Home</div>
+    <div class="nav-item">My Project</div>
+    <div class="nav-item">Documents</div>
+    <div class="nav-section">Configuration</div>
+    <div class="nav-item active">Master Template</div>
+    <div class="nav-item sub">Document Template</div>
+    <div class="nav-item sub">Field Mapping</div>
+    <div class="nav-item sub">Approval Matrix</div>
+    <div class="nav-item">Master Data</div>
+  </aside>
+
+  <main class="main">
+    <div class="breadcrumb">Configuration / Master Template / BPM</div>
+    <div class="page-head">
+      <div>
+        <h1>Master Template Config</h1>
+        <p>Buat template dokumen yang dapat diisi otomatis dari data project maupun diisi manual.</p>
+      </div>
+      <div class="top-actions">
+        <span class="save-state"><span class="status-dot"></span>Draft tersimpan</span>
+        <button onclick="previewJson()">Preview JSON</button>
+        <button onclick="downloadConfig()">Export Config</button>
+        <button class="primary" onclick="saveTemplate()">Save Template</button>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <!-- LEFT -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Template Structure</h2>
+            <small>Susun section dokumen.</small>
+          </div>
+          <button class="primary" onclick="addSection()">+ Section</button>
+        </div>
+        <div class="card-body">
+          <div class="field">
+            <label>Template Name</label>
+            <input id="templateName" value="BPM - Business Process Mapping" oninput="syncMeta()" />
+          </div>
+          <div class="row-2">
+            <div class="field">
+              <label>Code</label>
+              <input id="templateCode" value="BPM" oninput="syncMeta()" />
+            </div>
+            <div class="field">
+              <label>Version</label>
+              <input id="templateVersion" value="1.0" oninput="syncMeta()" />
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div id="sectionList" class="section-list"></div>
+
+          <div class="list-actions">
+            <button style="flex:1" onclick="moveSection(-1)">↑ Move Up</button>
+            <button style="flex:1" onclick="moveSection(1)">↓ Move Down</button>
+          </div>
+          <button class="danger" style="width:100%;margin-top:7px" onclick="deleteSection()">Delete Selected</button>
+
+          <div class="divider"></div>
+          <div class="mini-help">
+            Pilih section untuk mengubah <b>judul, tipe, data source, field binding, editable</b>, dan <b>required</b>.
+          </div>
+        </div>
+      </section>
+
+      <!-- CENTER -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Live Document Preview</h2>
+            <small>Preview mengikuti konfigurasi master template.</small>
+          </div>
+          <button onclick="window.print()">Print Preview</button>
+        </div>
+        <div class="preview-wrap">
+          <div class="document" id="documentPreview"></div>
+        </div>
+      </section>
+
+      <!-- RIGHT -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Section Properties</h2>
+            <small id="selectedLabel">Pilih section</small>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="hint">
+            <b>Data Source</b> menentukan apakah isi section otomatis dari project, diisi manual, atau gabungan keduanya.
+          </div>
+
+          <div class="field">
+            <label>Section Title</label>
+            <input id="propTitle" oninput="updateSelected()" />
+          </div>
+
+          <div class="field">
+            <label>Section Key</label>
+            <input id="propKey" oninput="updateSelected()" />
+          </div>
+
+          <div class="field">
+            <label>Component Type</label>
+            <select id="propType" onchange="updateSelected()">
+              <option value="header">Document Header</option>
+              <option value="info">Project Information</option>
+              <option value="text">Text / Paragraph</option>
+              <option value="flow">Process Flow</option>
+              <option value="table">Activity Table</option>
+              <option value="approval">Approval Signature</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Data Source</label>
+            <select id="propSource" onchange="updateSelected()">
+              <option value="project">Project Data</option>
+              <option value="manual">Manual Input</option>
+              <option value="mixed">Project + Manual</option>
+              <option value="system">System Generated</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Binding Key</label>
+            <input id="propBinding" placeholder="contoh: project.scopeOfWork" oninput="updateSelected()" />
+            <div class="binding">Contoh binding: <code id="bindingPreview">project.scopeOfWork</code></div>
+          </div>
+
+          <div class="field">
+            <label>Default / Placeholder Content</label>
+            <textarea id="propContent" oninput="updateSelected()"></textarea>
+          </div>
+
+          <div class="switch-row">
+            <span>Editable by User</span>
+            <div id="editableSwitch" class="switch on" onclick="toggleProp('editable')"></div>
+          </div>
+          <div class="switch-row">
+            <span>Required</span>
+            <div id="requiredSwitch" class="switch" onclick="toggleProp('required')"></div>
+          </div>
+          <div class="switch-row">
+            <span>Visible</span>
+            <div id="visibleSwitch" class="switch on" onclick="toggleProp('visible')"></div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="field">
+            <label>Config JSON</label>
+            <div class="json-box" id="jsonPreview"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script>
+  const sampleProject = {
+    projectName: "CR ESS-HR – Additional PTK",
+    bpmNo: "ASMO3-001",
+    crfNo: "(CRF/2026/09/0001)",
+    userName: "Bapak Ali",
+    userContact: "ali@company.co.id",
+    deptHead: "Bapak Budi",
+    deptHeadContact: "budi@company.co.id",
+    company: "PT Isuzu Astra Motor Indonesia",
+    proposedBy: "IT Manage Service 1",
+    application: "ESS-HR",
+    scopeOfWork: "Penambahan dan improvement proses PTK, monitoring kandidat, administrasi kandidat, serta integrasi data dengan Web Recruitment dan SAP.",
+    background: "Proses recruitment dan administrasi kandidat masih membutuhkan aktivitas manual dan belum seluruhnya terintegrasi antar-system.",
+    flowDescription: "User membuat PTK, approval berjalan sesuai matrix, kandidat diproses sampai administrasi selesai, kemudian data diverifikasi dan dikirim ke SAP.",
+    implementationEffort: "40 Mandays",
+    resources: "Business Analyst, Developer, Tester, Technical Lead",
+    infrastructure: "Menggunakan existing application server, database, dan integration service.",
+    businessBenefit: "Mengurangi proses manual, meningkatkan traceability, mempercepat administrasi kandidat, dan menjaga konsistensi data.",
+    flow: ["Create PTK","Approval PTK","Recruitment","FLK","Verification","SAP"],
+    activities: [
+      ["Prepare","28 Sep 2026","11 Oct 2026"],
+      ["Define","12 Oct 2026","01 Nov 2026"],
+      ["Design","02 Nov 2026","29 Nov 2026"],
+      ["Develop","30 Nov 2026","31 Jan 2027"],
+      ["Deploy","01 Feb 2027","22 Feb 2027"],
+      ["Complete","01 Mar 2027","31 Mar 2027"]
+    ]
+  };
+
+  let sections = [
+    {id:crypto.randomUUID(),title:"Document Header",key:"header",type:"header",source:"system",binding:"",content:"BUSINESS PROCESS MAPPING",editable:false,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Project Information",key:"projectInformation",type:"info",source:"project",binding:"project",content:"",editable:true,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Statement Scope of Work",key:"scopeOfWork",type:"text",source:"project",binding:"project.scopeOfWork",content:"",editable:true,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Business Process Justification (Background)",key:"background",type:"text",source:"project",binding:"project.background",content:"",editable:true,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Design Flow",key:"designFlow",type:"flow",source:"mixed",binding:"project.flow",content:"Create PTK → Approval → Recruitment → FLK → Verification → SAP",editable:true,required:false,visible:true},
+    {id:crypto.randomUUID(),title:"Penjelasan Flow",key:"flowDescription",type:"text",source:"project",binding:"project.flowDescription",content:"",editable:true,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Effort & Resource Needed",key:"effortResource",type:"text",source:"project",binding:"project.implementationEffort",content:"A. Implementasi : {{project.implementationEffort}}\nB. Resource : {{project.resources}}",editable:true,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Plan & Activity",key:"planActivity",type:"table",source:"project",binding:"project.activities",content:"",editable:true,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Software, Hardware and Infrastructure Request",key:"infrastructure",type:"text",source:"project",binding:"project.infrastructure",content:"",editable:true,required:false,visible:true},
+    {id:crypto.randomUUID(),title:"Business Benefit",key:"businessBenefit",type:"text",source:"project",binding:"project.businessBenefit",content:"",editable:true,required:true,visible:true},
+    {id:crypto.randomUUID(),title:"Approval",key:"approval",type:"approval",source:"manual",binding:"approval",content:"Technical Lead|Technical Advisor|User Representative",editable:false,required:true,visible:true}
+  ];
+
+  let selectedId = sections[2].id;
+
+  function templateConfig(){
+    return {
+      templateName: document.getElementById("templateName").value,
+      templateCode: document.getElementById("templateCode").value,
+      version: document.getElementById("templateVersion").value,
+      sections
+    };
+  }
+
+  function syncMeta(){
+    refreshJson();
+  }
+
+  function renderSectionList(){
+    const box = document.getElementById("sectionList");
+    box.innerHTML = "";
+    sections.forEach((s,i)=>{
+      const el = document.createElement("div");
+      el.className = "section-item" + (s.id===selectedId ? " active" : "");
+      el.onclick = ()=>selectSection(s.id);
+      el.innerHTML = `
+        <div class="drag">⋮⋮</div>
+        <div>
+          <div class="section-title">${i+1}. ${escapeHtml(s.title)}</div>
+          <div class="section-meta">${s.type} • ${s.source}${s.required ? " • required" : ""}</div>
+        </div>
+        <span class="badge">${s.visible ? "ON" : "OFF"}</span>`;
+      box.appendChild(el);
+    });
+  }
+
+  function selectSection(id){
+    selectedId=id;
+    renderSectionList();
+    loadProperties();
+    renderPreview();
+  }
+
+  function getSelected(){
+    return sections.find(s=>s.id===selectedId);
+  }
+
+  function loadProperties(){
+    const s=getSelected();
+    if(!s) return;
+    document.getElementById("selectedLabel").textContent=s.title;
+    document.getElementById("propTitle").value=s.title;
+    document.getElementById("propKey").value=s.key;
+    document.getElementById("propType").value=s.type;
+    document.getElementById("propSource").value=s.source;
+    document.getElementById("propBinding").value=s.binding||"";
+    document.getElementById("propContent").value=s.content||"";
+    document.getElementById("bindingPreview").textContent=s.binding||"(none)";
+    setSwitch("editableSwitch",s.editable);
+    setSwitch("requiredSwitch",s.required);
+    setSwitch("visibleSwitch",s.visible);
+    refreshJson();
+  }
+
+  function setSwitch(id,on){
+    document.getElementById(id).classList.toggle("on",!!on);
+  }
+
+  function updateSelected(){
+    const s=getSelected();
+    if(!s) return;
+    s.title=document.getElementById("propTitle").value;
+    s.key=document.getElementById("propKey").value;
+    s.type=document.getElementById("propType").value;
+    s.source=document.getElementById("propSource").value;
+    s.binding=document.getElementById("propBinding").value;
+    s.content=document.getElementById("propContent").value;
+    document.getElementById("bindingPreview").textContent=s.binding||"(none)";
+    renderSectionList();
+    renderPreview();
+    refreshJson();
+  }
+
+  function toggleProp(prop){
+    const s=getSelected();
+    if(!s) return;
+    s[prop]=!s[prop];
+    loadProperties();
+    renderPreview();
+    renderSectionList();
+  }
+
+  function addSection(){
+    const newSection={
+      id:crypto.randomUUID(),
+      title:"New Section",
+      key:"newSection"+(sections.length+1),
+      type:"text",
+      source:"manual",
+      binding:"",
+      content:"Isi default section...",
+      editable:true,
+      required:false,
+      visible:true
+    };
+    sections.push(newSection);
+    selectedId=newSection.id;
+    renderAll();
+  }
+
+  function deleteSection(){
+    const idx=sections.findIndex(s=>s.id===selectedId);
+    if(idx<0) return;
+    sections.splice(idx,1);
+    selectedId=sections[Math.max(0,idx-1)]?.id || null;
+    renderAll();
+  }
+
+  function moveSection(direction){
+    const idx=sections.findIndex(s=>s.id===selectedId);
+    if(idx<0) return;
+    const target=idx+direction;
+    if(target<0 || target>=sections.length) return;
+    [sections[idx],sections[target]]=[sections[target],sections[idx]];
+    renderAll();
+  }
+
+  function resolveBinding(binding){
+    if(!binding) return "";
+    const key=binding.replace(/^project\./,"");
+    if(binding==="project") return sampleProject;
+    return sampleProject[key] ?? "";
+  }
+
+  function textValue(section){
+    if(section.source==="project"){
+      return resolveBinding(section.binding) || section.content || "";
+    }
+    if(section.source==="system") return section.content || "";
+    if(section.source==="manual") return section.content || "";
+    if(section.source==="mixed"){
+      let t=section.content || "";
+      t=t.replace(/\{\{project\.([a-zA-Z0-9_]+)\}\}/g,(_,k)=>sampleProject[k]??"");
+      return t || resolveBinding(section.binding) || "";
+    }
+    return section.content || "";
+  }
+
+  function renderPreview(){
+    const root=document.getElementById("documentPreview");
+    root.innerHTML="";
+    let first=true;
+
+    sections.filter(s=>s.visible).forEach(s=>{
+      let block;
+      if(s.type==="header"){
+        block=document.createElement("div");
+        block.innerHTML=`
+          <div class="doc-conf">CONFIDENTIAL</div>
+          <table class="doc-table doc-top">
+            <tr>
+              <td class="doc-logo">agit</td>
+              <td>BPM No.<br>${escapeHtml(sampleProject.bpmNo)}<br><span style="font-size:9px;font-weight:400">${escapeHtml(sampleProject.crfNo)}</span></td>
+              <td>Microsoft Solution Center<br><span style="font-size:9px;font-weight:400">Astra Graphia - IT</span></td>
+            </tr>
+          </table>
+          <div class="doc-main-title">${escapeHtml(s.content || "BUSINESS PROCESS MAPPING")}</div>
+          <div class="doc-title"><b>Title :</b> ${escapeHtml(sampleProject.projectName)}</div>`;
+        first=false;
+      }
+      else if(s.type==="info"){
+        block=document.createElement("div");
+        block.innerHTML=`
+          <table class="doc-table">
+            <tr><td style="width:20%;font-weight:700;background:#fafafa">User Name</td><td>${escapeHtml(sampleProject.userName)}</td><td style="width:20%;font-weight:700;background:#fafafa">Phone/HP/Email</td><td>${escapeHtml(sampleProject.userContact)}</td></tr>
+            <tr><td style="font-weight:700;background:#fafafa">Dept. Head</td><td>${escapeHtml(sampleProject.deptHead)}</td><td style="font-weight:700;background:#fafafa">Phone/HP/Email</td><td>${escapeHtml(sampleProject.deptHeadContact)}</td></tr>
+            <tr><td style="font-weight:700;background:#fafafa">Company</td><td colspan="3">${escapeHtml(sampleProject.company)}</td></tr>
+            <tr><td style="font-weight:700;background:#fafafa">Proposed by</td><td colspan="3">${escapeHtml(sampleProject.proposedBy)}</td></tr>
+            <tr><td style="font-weight:700;background:#fafafa">Application</td><td colspan="3">${escapeHtml(sampleProject.application)}</td></tr>
+          </table>`;
+      }
+      else if(s.type==="text"){
+        block=document.createElement("div");
+        block.className="doc-section";
+        block.innerHTML=`<div class="doc-section-head">${escapeHtml(s.title)}</div><div class="doc-section-body">${escapeHtml(textValue(s))}</div>`;
+      }
+      else if(s.type==="flow"){
+        block=document.createElement("div");
+        block.className="doc-section";
+        const steps = Array.isArray(resolveBinding(s.binding)) ? resolveBinding(s.binding) : sampleProject.flow;
+        const flowHtml=steps.map((x,i)=>`<span class="step">${escapeHtml(x)}</span>${i<steps.length-1?'<span class="arrow">→</span>':''}`).join("");
+        block.innerHTML=`<div class="doc-section-head">${escapeHtml(s.title)}</div><div class="doc-flow">${flowHtml}</div>`;
+      }
+      else if(s.type==="table"){
+        block=document.createElement("div");
+        block.className="doc-section";
+        const rows=sampleProject.activities.map((r,i)=>`<tr><td>${i+1}</td><td>${escapeHtml(r[0])}</td><td>${escapeHtml(r[1])}</td><td>${escapeHtml(r[2])}</td></tr>`).join("");
+        block.innerHTML=`
+          <div class="doc-section-head">${escapeHtml(s.title)}</div>
+          <div style="padding:6px">
+            <table class="doc-table">
+              <tr><th>No</th><th>Activity</th><th>Start Date</th><th>End Date</th></tr>
+              ${rows}
+            </table>
+          </div>`;
+      }
+      else if(s.type==="approval"){
+        block=document.createElement("div");
+        const labels=(s.content||"Technical Lead|Technical Advisor|User Representative").split("|");
+        block.innerHTML=`
+          <table class="doc-approval">
+            <tr>
+              <td><b>Approved by ${escapeHtml(labels[0]||"Technical Lead")},</b></td>
+              <td><b>Approved by ${escapeHtml(labels[1]||"Technical Advisor")},</b></td>
+              <td><b>Approved by ${escapeHtml(labels[2]||"User Representative")},</b></td>
+            </tr>
+          </table>`;
+      }
+
+      if(block){
+        block.dataset.sectionId=s.id;
+        block.onclick=(e)=>{e.stopPropagation();selectSection(s.id)};
+        if(s.id===selectedId) block.classList.add("selected-outline");
+        root.appendChild(block);
+      }
+    });
+
+    const foot=document.createElement("div");
+    foot.className="doc-footer";
+    foot.textContent="Page 1 of 1";
+    root.appendChild(foot);
+  }
+
+  function refreshJson(){
+    document.getElementById("jsonPreview").textContent=JSON.stringify(templateConfig(),null,2);
+  }
+
+  function renderAll(){
+    renderSectionList();
+    loadProperties();
+    renderPreview();
+    refreshJson();
+  }
+
+  function previewJson(){
+    alert(JSON.stringify(templateConfig(),null,2));
+  }
+
+  function saveTemplate(){
+    localStorage.setItem("dtrace-master-template-bpm",JSON.stringify(templateConfig()));
+    document.querySelector(".save-state").innerHTML='<span class="status-dot"></span>Template tersimpan';
+  }
+
+  function downloadConfig(){
+    const blob=new Blob([JSON.stringify(templateConfig(),null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=(document.getElementById("templateCode").value || "template") + "-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function escapeHtml(v){
+    return String(v??"")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
+
+  renderAll();
+</script>
+</body>
+</html>

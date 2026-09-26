@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Implementation Plan – Log Shipping Switchover</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--tx:#1b2333;--mut:#667085;--bd:#dfe3ec;--pri:#c2570c;--pri2:#ffeadb;--hd:#eef1f7;--ok:#12805c;--okb:#e2f5ee;--ng:#b42318;--ngb:#fdecea;--ip:#8a6a00;--ipb:#fff4cf;--sk:#667085;--skb:#eef1f7;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10141d;--card:#181e2a;--tx:#e8ecf5;--mut:#98a2b8;--bd:#2a3244;--pri:#ffa564;--pri2:#3b2614;--hd:#1e2535;--ok:#4cd3a0;--okb:#12362b;--ng:#ff8a7a;--ngb:#3a1e1e;--ip:#f3c15e;--ipb:#3a2f12;--sk:#98a2b8;--skb:#1e2535}}
+:root[data-theme="dark"]{--bg:#10141d;--card:#181e2a;--tx:#e8ecf5;--mut:#98a2b8;--bd:#2a3244;--pri:#ffa564;--pri2:#3b2614;--hd:#1e2535;--ok:#4cd3a0;--okb:#12362b;--ng:#ff8a7a;--ngb:#3a1e1e;--ip:#f3c15e;--ipb:#3a2f12;--sk:#98a2b8;--skb:#1e2535}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1400px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0 0 4px}.sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}
+input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 8px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pri);outline-offset:-1px}
+.sums{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.st{border:1px solid var(--bd);border-radius:10px;padding:8px 12px;background:var(--card)}.st b{display:block;font-size:19px;font-variant-numeric:tabular-nums}.st span{font-size:12px;color:var(--mut)}
+.prog{height:8px;background:var(--hd);border-radius:99px;overflow:hidden;margin-bottom:14px}.prog i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+.tbl{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:1300px}
+th{background:var(--hd);text-align:left;font-size:12px;padding:8px;white-space:nowrap}
+th.g{text-align:center;border-left:1px solid var(--bd)}
+td{padding:7px 8px;border-top:1px solid var(--bd);vertical-align:top}
+tr.ph td{background:var(--pri2);color:var(--pri);font-weight:700;padding:8px 10px}
+td.n{color:var(--mut);width:30px}
+td.tm{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--mut)}
+td.eb{border-left:1px solid var(--bd)}
+.act{min-width:270px}.act b{font-weight:500}
+.dt{font-size:11.5px;font-weight:700;border-radius:6px;padding:1px 7px;display:inline-block}
+.dt.Yes{background:var(--ngb);color:var(--ng)}.dt.No{background:var(--skb);color:var(--sk)}
+tr.down td.n{box-shadow:inset 3px 0 0 var(--ng)}
+.dur{width:64px}
+.mini{font:inherit;font-size:12px;font-weight:600;border-radius:6px;padding:4px 9px;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx);white-space:nowrap}
+.mini.go{background:var(--pri);border-color:var(--pri);color:var(--card)}
+.stt{min-width:110px;font-weight:600}.stt.Done{background:var(--okb);color:var(--ok)}.stt.InProgress{background:var(--ipb);color:var(--ip)}.stt.Failed{background:var(--ngb);color:var(--ng)}.stt.Skipped{background:var(--skb);color:var(--sk)}
+.tot td{background:var(--hd);font-weight:700}
+button.b{font:inherit;font-weight:600;border-radius:8px;padding:8px 14px;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+button.p{background:var(--pri);border-color:var(--pri);color:var(--card)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:16px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none}.toast.on{opacity:1}
+</style></head><body><div class="wrap">
+<h1>Implementation Plan</h1><div class="sub">Log Shipping Switchover DC → DRC · durasi estimasi menyusun jadwal secara berurutan</div>
+<section class="card"><div class="grid">
+<div><label>Service Name</label><input value="Log Shipping DC → DRC"></div>
+<div><label>Tanggal Implementasi</label><input type="date" value="2026-10-03"></div>
+<div><label>Jam Mulai (Estimasi)</label><input type="time" id="t0" value="22:00"></div>
+<div><label>Host DC</label><input value="10.10.1.11"></div>
+<div><label>Host DRC</label><input value="10.20.1.11"></div>
+<div><label>Host Apps</label><input value="10.10.2.21"></div>
+</div></section>
+<div class="sums" id="sums"></div><div class="prog"><i id="pb"></i></div>
+<div class="box"><div class="tbl"><table><thead>
+<tr><th rowspan="2">No</th><th rowspan="2">Activity</th><th rowspan="2">Hostname / IP</th><th rowspan="2">Downtime</th><th rowspan="2">PIC</th><th colspan="3" class="g">Estimate</th><th colspan="3" class="g">Actual</th><th rowspan="2" class="g">Status</th><th rowspan="2">Note</th></tr>
+<tr><th class="g">Start</th><th>Durasi (mnt)</th><th>End</th><th class="g">Start</th><th>Duration</th><th>End</th></tr></thead>
+<tbody id="tb"></tbody><tfoot id="tf"></tfoot></table></div></div>
+<div class="actions"><button class="b" id="rs">Reset Actual</button><button class="b" id="sv">Simpan Draft</button><button class="b p" id="sb">Tandai Implementasi Selesai</button></div>
+</div><div class="toast" id="t"></div>
+<script>
+const $=i=>document.getElementById(i);
+const P=[["Pre-Activity",[
+["Verify Log Shipping Status (Last Backup, Last Copy, Last Restore)","ip dc & ip drc","No","DBA",10,"cek by query dan juga folder share nya"],
+["Verify SQL Server Agent seluruh Log Shipping Job berjalan normal","ip dc & ip drc","No","DBA",5,""],
+["Pastikan tidak ada transaksi panjang (Long Running Transaction)","ip dc","No","DBA",5,""],
+["Cek database status (ONLINE)","ip dc","No","DBA",3,""],
+["Verify application server connectivity to DRC SQL Server","ip server apps","No","Apps",5,""],
+["Capture screenshot Log Shipping Monitor (Before)","ip dc & ip drc","No","DBA",3,""]]],
+["Main Activity",[
+["Stop application / Enable maintenance mode","ip server apps","No","Apps",5,""],
+["Verify no active application sessions","ip server apps","No","Apps",3,""],
+["Verify no active database sessions","ip dc","No","DBA",3,""],
+["Disable seluruh Log Shipping Job (Backup, Copy, Restore, Alert)","ip dc & ip drc","Yes","DBA",5,""],
+["Jalankan secara manual job Log Shipping Backup, Copy, Restore pada DC & DRC per-database","ip dc & ip drc","Yes","DBA",20,""],
+["Backup log transaksi terakhir di DC Site","ip dc","Yes","DBA",10,""],
+["Copy backup log file ke DRC Site","ip dc & ip drc","Yes","DBA",10,""],
+["Restore log backup file terakhir WITH RECOVERY","ip drc","No","DBA",15,""],
+["Verifikasi database status = ONLINE dan READ_WRITE","ip drc","No","DBA",5,""],
+["Change application connection string / Configuration to DRC","ip drc","No","Apps",10,""]]],
+["Post Activity",[
+["Validate database accessibility","ip drc","No","DBA",5,""],
+["Execute application smoke test","ip server apps","No","Apps",10,""],
+["Validate application functionality","ip server apps","No","Apps",15,""]]]];
+let R=[],n=0;P.forEach(([p,a])=>a.forEach(x=>R.push({p,act:x[0],host:x[1],down:x[2],pic:x[3],dur:x[4],note:x[5],st:"Not Started",as:null,ae:null})));
+const pad=v=>String(v).padStart(2,"0");
+const hm=s=>pad(Math.floor(s/3600)%24)+":"+pad(Math.floor(s%3600/60));
+const hms=s=>pad(Math.floor(s/3600))+":"+pad(Math.floor(s%3600/60))+":"+pad(Math.floor(s%60));
+const tp=v=>{const[a,b]=(v||"00:00").split(":");return a*3600+b*60};
+const now=()=>{const d=new Date();return d.getHours()*3600+d.getMinutes()*60+d.getSeconds()};
+function render(){
+let s=tp($('t0').value),h="",last="";
+R.forEach((r,i)=>{if(r.p!=last){h+=`<tr class="ph"><td colspan="13">${r.p}</td></tr>`;last=r.p}
+const es=s,ee=s+r.dur*60;s=ee;r.es=es;r.ee=ee;
+const ad=r.as!=null&&r.ae!=null?r.ae-r.as:null;r.ad=ad;
+h+=`<tr class="${r.down=='Yes'?'down':''}"><td class="n">${i+1}</td><td class="act"><b>${r.act}</b></td><td style="white-space:nowrap">${r.host}</td>
+<td><span class="dt ${r.down}">${r.down}</span></td><td>${r.pic}</td>
+<td class="tm eb">${hm(es)}</td><td><input class="dur" type="number" min="1" value="${r.dur}" data-i="${i}" data-k="dur"></td><td class="tm">${hm(ee)}</td>
+<td class="tm eb">${r.as!=null?hms(r.as):`<button class="mini go" data-a="s" data-i="${i}">▶ Start</button>`}</td>
+<td class="tm">${ad!=null?hms(ad):'–'}</td>
+<td class="tm">${r.ae!=null?hms(r.ae):(r.as!=null?`<button class="mini go" data-a="f" data-i="${i}">✔ Finish</button>`:'–')}</td>
+<td class="eb"><select class="stt ${r.st.replace(/ /g,'')}" data-i="${i}" data-k="st">${["Not Started","In Progress","Done","Failed","Skipped"].map(o=>`<option ${r.st==o?'selected':''}>${o}</option>`).join('')}</select></td>
+<td><input data-i="${i}" data-k="note" value="${r.note.replace(/"/g,'&quot;')}" placeholder="Catatan" style="min-width:160px"></td></tr>`});
+$('tb').innerHTML=h;
+const te=R.reduce((a,r)=>a+r.dur*60,0),de=R.filter(r=>r.down=='Yes').reduce((a,r)=>a+r.dur*60,0);
+const ta=R.reduce((a,r)=>a+(r.ad||0),0),da=R.filter(r=>r.down=='Yes').reduce((a,r)=>a+(r.ad||0),0);
+$('tf').innerHTML=`<tr class="tot"><td colspan="5">Total Duration</td><td></td><td class="tm">${hms(te)}</td><td></td><td></td><td class="tm">${hms(ta)}</td><td colspan="3"></td></tr>
+<tr class="tot"><td colspan="5">Total Downtime Duration</td><td></td><td class="tm">${hms(de)}</td><td></td><td></td><td class="tm">${hms(da)}</td><td colspan="3"></td></tr>`;
+const c=k=>R.filter(r=>r.st==k).length,fin=c("Done")+c("Skipped");
+$('sums').innerHTML=[["Progres",fin+"/"+R.length],["Estimasi selesai",hm(s)],["Total downtime (est.)",hms(de)],["Total durasi (aktual)",hms(ta)],["Failed",c("Failed")]].map(x=>`<div class="st"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
+$('pb').style.width=fin/R.length*100+'%'}
+document.addEventListener('input',e=>{const d=e.target.dataset;if(d.k=='note')R[d.i].note=e.target.value});
+document.addEventListener('change',e=>{const d=e.target.dataset;if(!d.k||d.k=='note')return;
+if(d.k=='dur')R[d.i].dur=Math.max(1,+e.target.value||1);else R[d.i].st=e.target.value;render()});
+document.addEventListener('click',e=>{const b=e.target.closest('.mini');if(!b)return;const r=R[b.dataset.i];
+if(b.dataset.a=='s'){r.as=now();r.st="In Progress"}else{r.ae=now();r.st="Done"}render()});
+$('t0').oninput=render;
+$('rs').onclick=()=>{R.forEach(r=>{r.as=r.ae=null;r.st="Not Started"});render()};
+function toast(m){$('t').textContent=m;$('t').classList.add('on');setTimeout(()=>$('t').classList.remove('on'),1800)}
+$('sv').onclick=()=>toast('Draft tersimpan (mockup)');
+$('sb').onclick=()=>{const p=R.filter(r=>!["Done","Skipped"].includes(r.st)).length;toast(p?p+' aktivitas belum selesai':'Implementasi ditandai selesai (mockup)')};
+render();
+</script></body></html>

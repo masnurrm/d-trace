@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Release Request Form – Security Checklist</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--tx:#1b2333;--mut:#667085;--bd:#dfe3ec;--pri:#b42318;--pri2:#fdecea;--ok:#12805c;--okbg:#e2f5ee;--no:#8a5a00;--nobg:#fff1d6;--hd:#eef1f7;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10141d;--card:#181e2a;--tx:#e8ecf5;--mut:#98a2b8;--bd:#2a3244;--pri:#ff8a7a;--pri2:#3a1e1e;--ok:#4cd3a0;--okbg:#12362b;--no:#f3c15e;--nobg:#3a2f12;--hd:#1e2535}}
+:root[data-theme="dark"]{--bg:#10141d;--card:#181e2a;--tx:#e8ecf5;--mut:#98a2b8;--bd:#2a3244;--pri:#ff8a7a;--pri2:#3a1e1e;--ok:#4cd3a0;--okbg:#12362b;--no:#f3c15e;--nobg:#3a2f12;--hd:#1e2535}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1150px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:flex-end;margin-bottom:16px}
+h1{font-size:22px;margin:0}h1 small{display:block;font-size:13px;color:var(--pri);font-weight:600;margin-top:2px}
+.dt{color:var(--mut);font-size:13px}.dt b{color:var(--tx)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px;margin-bottom:18px}
+.card h2{font-size:15px;margin:0 0 2px}.sub{color:var(--mut);font-size:12.5px;margin-bottom:14px}
+.badge{display:inline-block;background:var(--pri2);color:var(--pri);border-radius:6px;padding:1px 8px;font-weight:700;margin-right:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.span2{grid-column:span 2}@media(max-width:560px){.span2{grid-column:auto}}
+label{display:block;font-size:12px;font-weight:600;margin-bottom:4px}label small{color:var(--mut);font-weight:400}
+input,select,textarea{width:100%;font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:8px 10px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pri);outline-offset:-1px}
+.row{display:flex;gap:8px;align-items:center}.row span{color:var(--mut);font-size:12px;white-space:nowrap}
+.bar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:12px}
+.prog{flex:1;min-width:180px;height:8px;background:var(--hd);border-radius:99px;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:var(--ok);transition:width .25s}
+.stat{font-size:12.5px;color:var(--mut)}.stat b{color:var(--tx)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{font:inherit;font-size:12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:99px;padding:4px 11px;cursor:pointer}
+.chip.on{background:var(--pri);border-color:var(--pri);color:#fff}
+.tbl{overflow-x:auto;border:1px solid var(--bd);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:1000px}
+th{background:var(--hd);text-align:left;font-size:12px;padding:8px 10px;white-space:nowrap}
+td{padding:8px 10px;border-top:1px solid var(--bd);vertical-align:top}
+td.n{color:var(--mut);width:34px}
+.dom{display:inline-block;font-size:11px;font-weight:600;background:var(--hd);border-radius:5px;padding:2px 7px;white-space:nowrap}
+.it b{display:block}.it span{display:block;color:var(--mut);font-size:12.5px;margin-top:3px;white-space:pre-line}
+td input,td select{padding:5px 8px;font-size:13px}
+.res{min-width:112px}.res.done{background:var(--okbg);color:var(--ok);font-weight:600}.res.no{background:var(--nobg);color:var(--no);font-weight:600}
+.ev{background:none;border:1px dashed var(--bd);color:var(--pri);border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;white-space:nowrap}
+.ev.has{border-style:solid;background:var(--pri2)}
+.actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+button.b{font:inherit;font-weight:600;border-radius:8px;padding:9px 16px;cursor:pointer;border:1px solid var(--bd);background:var(--card);color:var(--tx)}
+button.p{background:var(--pri);border-color:var(--pri);color:#fff}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:8px;opacity:0;transition:.25s;pointer-events:none}.toast.on{opacity:1}
+</style></head><body><div class="wrap">
+<header><div><h1>Release Request Form<small>Security Checklist</small></h1></div><div class="dt">Document Date &amp; Time: <b>24/Sep/2026 21:10</b></div></header>
+
+<section class="card"><h2><span class="badge">A</span>General Information</h2>
+<div class="sub">Diisi oleh IT Development sebagai Requester</div>
+<div class="grid">
+<div><label>Service Name</label><input placeholder="Nama layanan"></div>
+<div><label>Reference <small>(jika perlu)</small></label><input placeholder="No. referensi"></div>
+<div><label>Release Type</label><select><option>Project</option><option>CR</option><option>ICR</option></select></div>
+<div><label>Service Type</label><select><option>Application</option><option>Infrastructure</option></select></div>
+<div><label>Service Version</label><input value="1"></div>
+<div><label>Priority</label><select><option selected>High</option><option>Medium</option><option>Low</option></select></div>
+<div><label>Down-Time Duration</label><div class="row"><input type="number" min="0" placeholder="0"><span>Jam</span><input type="number" min="0" max="59" placeholder="0"><span>Menit</span></div></div>
+<div class="span2"><label>Requested Deployment</label><div class="row"><input type="datetime-local" value="2026-04-15T00:00"><span>s/d</span><input type="datetime-local" value="2026-04-15T00:00"></div></div>
+<div class="span2"><label>After Go-Live Support</label><div class="row"><input type="date" value="2026-04-16"><span>s/d</span><input type="date" value="2026-06-15"></div></div>
+<div class="span2"><label>Impact Description <small>(jika perlu)</small></label><textarea rows="3" placeholder="Dampak rilis terhadap layanan/pengguna"></textarea></div>
+</div></section>
+
+<section class="card"><h2><span class="badge">B</span>Security Checklist</h2>
+<div class="sub">Diisi oleh IT Security sebagai Checker</div>
+<div class="bar"><div class="prog"><i id="pb"></i></div>
+<div class="stat"><b id="sd">0</b> Done · <b id="sn">0</b> No Need · <b id="sp">56</b> Pending</div>
+<button class="b" id="all">Tandai semua Done</button></div>
+<div class="chips" id="chips"></div>
+<div class="tbl"><table><thead><tr><th>No</th><th>Domain</th><th>Item</th><th>Result</th><th>Remark</th><th>Checker</th><th>Date</th><th>Evidence</th></tr></thead><tbody id="tb"></tbody></table></div>
+</section>
+<div class="actions"><button class="b" id="sv">Simpan Draft</button><button class="b p" id="sb">Submit Security Checklist</button></div>
+</div><div class="toast" id="t"></div>
+<script>
+const D={I:"Infrastructure Security",A:"Application Security",M:"Monitoring & Detection",D:"Identity & Access Management",E:"Email Security",N:"Endpoint Security",B:"Data Security & Backup"};
+const L=[
+["I","Monthly port scanning","Gunakan tools gratis (nmap)."],
+["I","System Lifecycle","OS & software pendukung memakai versi terbaru.\nQW-Internet Facing & Cloud (7): Critical Patch. QW-(22): penanganan End of Life/Support (upgrade/replace/hardening)."],
+["M","Managed Security Services","Monitor & analisis security event; ingest log server & aplikasi ke SIEM bila perlu."],
+["I","Akses administratif internal","Aktivitas administratif hanya dapat diakses dari jaringan internal perusahaan."],
+["M","Penetration Test (before Go-Live)","Semua temuan Critical–Low wajib diremediasi; yang tidak bisa harus mendapat risk acceptance resmi dari IT Security."],
+["I","Host-to-host communication","Open akses hanya ke server & port tertentu.\nQW (1) HTTPS only, QW (3) blok port tidak perlu, QW-Internal (28) segmentasi jaringan."],
+["I","Disable TLS 1.1","Gunakan TLS terbaru (minimum TLS 1.2)."],
+["I","Disable SMBv1",""],
+["I","Hapus cipher suite 3DES","Hapus dari registry SSL Configuration. Gunakan enkripsi & hash terbaru (SHA-256, AES-256) untuk data at rest, in transit, PII."],
+["I","SSL Certificate HTTPS","Inject certificate SSL; QW (1) gunakan hanya protokol aman."],
+["I","Critical Patch","IT devices, OS, aplikasi, database, open source software."],
+["A","Multi Factor Authentication (MFA)","Admin & Employee/Vendor: tersedia dan wajib di-enforce. Customer: tersedia dan wajib disosialisasikan."],
+["A","Strong Password","Panjang min. 8 karakter (customer/employee/vendor), 14 (admin). Kompleksitas A-Z, a-z, 0-9, simbol. Masa berlaku 30 hari."],
+["A","Change Password at first login","Konfigurasi dari sisi aplikasi."],
+["A","Ganti password saat Go-Live","Dilakukan oleh user."],
+["A","Access Restriction (RBAC)","Wajib ada matriks otorisasi: pemisahan admin & user, level admin, SOD, dan developer."],
+["A","Application Log","Wajib aktif: authentication log (login & ubah password) dan transaction log (perubahan data kritikal)."],
+["A","URL admin unik","Hindari /admin; gunakan URL unik yang tidak terkait fungsi/nama aplikasi."],
+["A","Alias akun admin","Username admin disamarkan."],
+["A","Pembatasan upload file","Berdasarkan ekstensi yang diizinkan."],
+["A","Input validation & output encoding","Validasi input server-side yang ketat."],
+["A","Error handling","Tanpa membuka stack trace atau informasi sistem sensitif."],
+["A","No hardcoded credentials","Tidak ada kredensial, secret, atau API key di codebase."],
+["A","Restricted public source code repositories","a. Daftar repo public & private. b. Bukti access control yang membatasi repo public."],
+["I","Batasi domain admin","Maksimal 4 akun."],
+["I","WAF & rate limiting","Lindungi dari serangan web dan batasi percobaan login (anti brute force)."],
+["D","MFA – Administrator accounts","Cloud admin, global admin, organization admin."],
+["D","MFA – Remote access / VPN","Prioritas akun admin."],
+["D","Credential testing","Tidak boleh disimpan di repositori."],
+["D","MFA – O365 / Google Workspace",""],
+["D","Batasi akun administrator","Maks. 4 akun; kelola contributor admin; pisahkan akun normal dan privileged."],
+["D","AD Hardening","Berdasarkan Microsoft AD security baseline."],
+["D","Least privilege DB & server instance","Bukan DBA atau local admin (MSSQL, Oracle, dll)."],
+["D","Jump host / PAM","Akses administrator ke server melalui jump host atau PAM."],
+["D","Restrict sharing folder","Blok Everyone dan penyimpanan file executable."],
+["D","Scan sensitive files","Rutin pada open shared folders."],
+["D","Password policy","Blok common word & guessable password (mis. Azure AD Password Protection)."],
+["E","Antivirus/Antimalware",""],["E","Antispam",""],["E","URL Protection at time of click",""],
+["E","Tag email eksternal","Tandai email dari luar organisasi."],["E","SPF",""],
+["E","Blok attachment berisiko","Mis. exe, vbs, msi sesuai kebijakan."],
+["E","MFA remote access email",""],["E","Secure SMTP",""],["E","DMARC",""],["E","DKIM",""],
+["E","Enkripsi email sensitif",""],
+["N","Blok PowerShell berbahaya","Menggunakan EDR."],
+["N","Wajib EDR","Instal pada server terkait & full scan. QW-Cloud (24) EDR di IaaS; QW-Internal (27) prioritas server kritikal."],
+["N","Blok macro office eksternal",""],
+["B","Kecukupan sistem backup","RTO & RPO sesuai risk appetite bisnis."],
+["B","Periodic restore testing","Termasuk skenario recovery."],
+["B","Akun admin backup","Tidak memakai domain account."],
+["B","Offline / immutable backup","Pertahanan terakhir terhadap ransomware."],
+["M","Vulnerability Assessment","Temuan Critical–Low wajib diremediasi; yang tidak bisa perlu risk acceptance dari IT Security."]];
+const tb=document.getElementById('tb'),ch=document.getElementById('chips');
+L.forEach(([d,t,x],i)=>tb.insertAdjacentHTML('beforeend',`<tr data-d="${d}"><td class="n">${i+1}</td><td><span class="dom">${D[d]}</span></td>
+<td class="it"><b>${t}</b>${x?`<span>${x}</span>`:''}</td>
+<td><select class="res"><option value="">— Pilih —</option><option value="done">Done</option><option value="no">No Need</option></select></td>
+<td><input placeholder="Catatan"></td><td><input placeholder="Nama"></td><td><input type="date"></td>
+<td><button class="ev" type="button">+ Lampirkan</button></td></tr>`));
+ch.innerHTML='<button class="chip on" data-d="">Semua (56)</button>'+Object.entries(D).map(([k,v])=>`<button class="chip" data-d="${k}">${v} (${L.filter(l=>l[0]==k).length})</button>`).join('');
+ch.onclick=e=>{const b=e.target.closest('.chip');if(!b)return;ch.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c==b));
+tb.querySelectorAll('tr').forEach(r=>r.hidden=b.dataset.d&&r.dataset.d!=b.dataset.d)};
+function upd(){let d=0,x=0;document.querySelectorAll('.res').forEach(s=>{s.className='res'+(s.value?' '+s.value:'');if(s.value=='done')d++;if(s.value=='no')x++});
+sd.textContent=d;sn.textContent=x;sp.textContent=56-d-x;pb.style.width=((d+x)/56*100)+'%'}
+tb.addEventListener('change',upd);
+tb.addEventListener('click',e=>{if(e.target.classList.contains('ev')){const b=e.target,h=b.classList.toggle('has');b.textContent=h?'✓ evidence.pdf':'+ Lampirkan'}});
+all.onclick=()=>{document.querySelectorAll('.res').forEach(s=>s.value='done');upd()};
+function toast(m){t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1800)}
+sv.onclick=()=>toast('Draft tersimpan (mockup)');
+sb.onclick=()=>toast(sp.textContent=='0'?'Checklist terkirim (mockup)':'Masih ada '+sp.textContent+' item pending');
+upd();
+</script></body></html>

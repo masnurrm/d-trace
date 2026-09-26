@@ -1,0 +1,1283 @@
+// D-Trace data model.
+//
+// Conventions:
+//  - every table carries createdAt/updatedAt;
+//  - nothing is hard-deleted that an auditor may need (AuditLog is append-only);
+//  - secrets are stored hashed (User.passwordHash, Session.tokenHash), never raw.
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Mirrors ROLES in @dtrace/shared. Changing one without the other is a bug.
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  AUDITOR
+  OPERATOR
+  VIEWER
+}
+
+model User {
+  id           String @id @default(uuid()) @db.Uuid
+  email        String @unique
+  name         String
+  /// Argon2id hash. The plaintext password never leaves the request handler.
+  passwordHash String
+
+  role     Role    @default(VIEWER)
+  isActive Boolean @default(true)
+
+  /// Brute-force throttling state, checked before any hash comparison.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  /// Only a Checker may create a Form Checklist or record a CCB Go/NoGo.
+  isChecker Boolean @default(false)
+
+  lastLoginAt       DateTime?
+  passwordChangedAt DateTime  @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions        Session[]
+  auditLogs       AuditLog[]
+  nodeAccess      UserNodeAccess[]
+  ownedDocuments  Document[]           @relation("DocumentOwner")
+  projectMembers  ProjectMember[]      @relation("ProjectMembership")
+  documentAccess  DocumentPermission[] @relation("DocumentAccess")
+  notifications   Notification[]       @relation("NotificationRecipient")
+  favorites       DocumentFavorite[]
+  signature       UserSignature?
+  assignedTasks   ProjectTask[]        @relation("TaskAssignee")
+  sentInvitations Invitation[]         @relation("InvitationSender")
+  developedBugs   ProjectBug[]         @relation("BugDeveloper")
+  verifiedBugs    ProjectBug[]         @relation("BugQa")
+  reportedBugs    ProjectBug[]         @relation("BugReporter")
+
+  @@index([role])
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("users")
+}
+
+/// One row per issued refresh token. Rotation writes a new row and revokes the
+/// old one; reuse of a revoked row kills the whole `familyId` (token theft).
+model Session {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the refresh token. A database leak yields no usable token.
+  tokenHash String @unique
+  /// Groups every rotation descended from a single login.
+  familyId  String @db.Uuid
+
+  userAgent    String?
+  ip           String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Append-only trail. Writes come from AuditService; nothing updates or deletes.
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+
+  action   String
+  entity   String?
+  entityId String?
+
+  actorId    String? @db.Uuid
+  actor      User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// Denormalised so the trail survives the actor being deleted.
+  actorEmail String?
+
+  ip        String?
+  userAgent String?
+  /// Redacted via `redact()` from @dtrace/shared before it gets here.
+  metadata  Json?
+
+  /// The changed fields as they were. Null for an insert.
+  before Json?
+  /// The changed fields as they became. Null for a delete.
+  /// An update stores only what moved; an insert stores the whole new row.
+  after  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
+
+/// Footer text alignment, mirrored by FOOTER_ALIGNMENTS in @dtrace/shared.
+enum FooterAlign {
+  LEFT
+  CENTER
+  RIGHT
+}
+
+/// What a marquee entry carries, mirrored by MARQUEE_KINDS in @dtrace/shared.
+enum MarqueeKind {
+  TEXT
+  LINK
+}
+
+/// SMTP transport security, mirrored by SMTP_ENCRYPTIONS in @dtrace/shared.
+enum SmtpEncryption {
+  NONE
+  STARTTLS
+  SSL_TLS
+}
+
+/// Application settings. Exactly one row: the id is fixed to "singleton", so
+/// the schema itself makes a second configuration impossible to create.
+model AppSetting {
+  id String @id @default("singleton")
+
+  appName String  @default("D-Trace")
+  tagline String?
+
+  footerText        String?
+  footerAlign       FooterAlign @default(CENTER)
+  footerShowAppName Boolean     @default(true)
+  footerShowVersion Boolean     @default(true)
+
+  marqueeEnabled      Boolean @default(false)
+  /// Seconds for one full pass of the marquee.
+  marqueeSpeedSeconds Int     @default(15)
+
+  smtpHost       String?
+  smtpPort       Int?
+  smtpEncryption SmtpEncryption @default(STARTTLS)
+  smtpUsername   String?
+  /// AES-256-GCM ciphertext, never returned by the API. See secret-box.ts.
+  smtpPassword   String?
+  mailFromName   String?
+  mailFromEmail  String?
+
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
+
+  marqueeItems MarqueeItem[]
+
+  @@map("app_settings")
+}
+
+/// One scheduled announcement in the header marquee.
+model MarqueeItem {
+  id        String     @id @default(uuid()) @db.Uuid
+  settingId String     @default("singleton")
+  setting   AppSetting @relation(fields: [settingId], references: [id], onDelete: Cascade)
+
+  kind MarqueeKind @default(TEXT)
+  text String
+  url  String?
+
+  /// Null means "no bound": an item with neither is always live.
+  startsAt DateTime?
+  endsAt   DateTime?
+
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([settingId, position])
+  @@index([startsAt, endsAt])
+  @@map("marquee_items")
+}
+
+/// What a node *is*, and where that kind of thing may stand. Placement rules
+/// live in data so a new organisational level needs no code change.
+model NodeType {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+  code String @unique
+
+  /// May a node of this type stand at the top of the tree?
+  canBeRoot Boolean @default(false)
+  isActive  Boolean @default(true)
+  position  Int     @default(0)
+
+  /// Self m-n: the types allowed directly above this one.
+  allowedParents  NodeType[] @relation("NodeTypePlacement")
+  allowedChildren NodeType[] @relation("NodeTypePlacement")
+
+  nodes Node[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@map("node_types")
+}
+
+/// One entry in the organisation hierarchy.
+model Node {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+  code String @unique
+
+  typeId String   @db.Uuid
+  type   NodeType @relation(fields: [typeId], references: [id])
+
+  /// Restrict, not Cascade: deleting a parent must be a deliberate act on each
+  /// child, never a silent sweep of an entire branch.
+  parentId String? @db.Uuid
+  parent   Node?   @relation("NodeTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children Node[]  @relation("NodeTree")
+
+  isActive Boolean @default(true)
+  /// Order among siblings.
+  position Int     @default(0)
+  /// 0 for a root. Maintained on write so level filters stay one query.
+  depth    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userAccess UserNodeAccess[]
+  projects   Project[]
+
+  @@index([parentId, position])
+  @@index([typeId])
+  @@index([isActive])
+  @@map("nodes")
+}
+
+/// How a template section renders, mirrored by TEMPLATE_COMPONENT_TYPES in
+/// @dtrace/shared. Changing one without the other is a bug.
+enum TemplateComponentType {
+  HEADER
+  INFO
+  TEXT
+  FLOW
+  TABLE
+  APPROVAL
+  CHECKLIST
+  /// Numbers taken from another screen (mandays, timeline), snapshotted per document.
+  DATA
+}
+
+/// Where a section's content comes from, mirrored by TEMPLATE_DATA_SOURCES.
+enum TemplateDataSource {
+  PROJECT
+  MANUAL
+  MIXED
+  SYSTEM
+}
+
+/// A master document template: the blueprint a document is produced from.
+/// Sections are rows rather than one JSON blob so ordering, counting and
+/// key uniqueness stay database concerns instead of application ones.
+model DocumentTemplate {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String
+  code        String  @unique
+  version     String  @default("1.0")
+  description String?
+  isActive    Boolean @default(true)
+
+  sections  DocumentTemplateSection[]
+  assets    DocumentTemplateAsset[]
+  documents Document[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedById String?  @db.Uuid
+
+  @@index([isActive])
+  @@index([updatedAt])
+  @@map("document_templates")
+}
+
+/// One block in a template. `config` is the component-specific shape, validated
+/// by the discriminated union in @dtrace/shared before it ever reaches here —
+/// Postgres stores it, the contract guarantees it.
+model DocumentTemplateSection {
+  id         String           @id @default(uuid()) @db.Uuid
+  templateId String           @db.Uuid
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  title String
+  /// Stable handle a document binds to; unique within its template.
+  key   String
+
+  type   TemplateComponentType @default(TEXT)
+  source TemplateDataSource    @default(MANUAL)
+
+  /// Dotted path into project data, e.g. `project.scopeOfWork`.
+  binding     String?
+  /// Default or placeholder body.
+  content     String?
+  /// Component-specific configuration. See document-template.schema.ts.
+  config      Json    @default("{}")
+  /// Images printed under the section: `{ assetId, fileName, caption, width }[]`.
+  attachments Json    @default("[]")
+
+  editable Boolean @default(true)
+  required Boolean @default(false)
+  visible  Boolean @default(true)
+
+  /// Order within the template.
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateId, key])
+  @@index([templateId, position])
+  @@map("document_template_sections")
+}
+
+/// An image uploaded for use in a template section.
+///
+/// Bytes on disk under `UPLOAD_DIR`, like `DocumentFile`; `storageKey` is
+/// generated here and never the uploaded name. A section points at an asset by
+/// id from its `attachments` JSON.
+///
+/// `templateId` is provenance, not ownership: it is set null rather than
+/// cascading when the template goes, because a duplicated template points at
+/// the same assets, and an image that vanished with the template it was first
+/// uploaded to would leave a hole in every copy.
+model DocumentTemplateAsset {
+  id String @id @default(uuid()) @db.Uuid
+
+  templateId String?           @db.Uuid
+  template   DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  /// The name as uploaded, shown to people only.
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  /// Opaque name on disk, generated here.
+  storageKey String @unique
+
+  uploadedById String?  @db.Uuid
+  createdAt    DateTime @default(now())
+
+  @@index([templateId])
+  @@map("document_template_assets")
+}
+
+/// Roles held inside a project, mirrored by PROJECT_ROLES in @dtrace/shared.
+enum ProjectRole {
+  ADMIN
+  MANAGER
+  COLLABORATOR
+  VIEWER
+}
+
+/// One cell of the project permission matrix.
+///
+/// A row per (permission, role) rather than one JSON blob: it keeps "may this
+/// role do this?" a single indexed lookup once enforcement starts reading it,
+/// and it makes a diff in the audit trail meaningful.
+model ProjectRolePermission {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// A key from the PERMISSIONS catalog in @dtrace/shared.
+  permission String
+  role       ProjectRole
+  allowed    Boolean     @default(false)
+
+  updatedAt      DateTime @updatedAt
+  updatedById    String?  @db.Uuid
+  updatedByEmail String?
+
+  @@unique([permission, role])
+  @@index([role])
+  @@map("project_role_permissions")
+}
+
+/// What a user may reach in the hierarchy, and as what.
+///
+/// One row per (user, node). Granting a parent does not imply its children:
+/// the form expands a tick downwards for convenience, but every node a person
+/// can reach is written down, so the answer to "who can see this node" is a
+/// single query and never an inference.
+model UserNodeAccess {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  nodeId String @db.Uuid
+  node   Node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  role              ProjectRole @default(VIEWER)
+  /// The one extra a Manager may hand a Collaborator, bounded by the matrix.
+  canCreateDocument Boolean     @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, nodeId])
+  @@index([nodeId])
+  @@map("user_node_access")
+}
+
+/// The six stages a project moves through, mirrored by PROJECT_STAGES in
+/// @dtrace/shared. Ordered: the enum's order is the progression.
+enum ProjectStage {
+  PREPARE
+  DEFINE
+  DESIGN
+  DEVELOP
+  DEPLOY
+  COMPLETE
+}
+
+/// Where a project stands, mirrored by PROJECT_STATUSES in @dtrace/shared.
+enum ProjectStatus {
+  ON_PROGRESS
+  ON_HOLD
+  DONE
+  CANCELLED
+}
+
+/// A piece of work inside one node of the hierarchy.
+///
+/// A project belongs to exactly one node, and that node is what decides who
+/// may reach it: membership is not stored per project, it is read from
+/// `UserNodeAccess` on the node. One grant at IAMI therefore covers every
+/// project there, which is how the access screen is meant to be understood.
+model Project {
+  id   String @id @default(uuid()) @db.Uuid
+  name String
+  /// Unique within its node, not globally: two nodes may each run a "PTK".
+  code String
+
+  nodeId String @db.Uuid
+  node   Node   @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+
+  stage  ProjectStage  @default(PREPARE)
+  status ProjectStatus @default(ON_PROGRESS)
+
+  description String?
+  startsAt    DateTime?
+  goLiveAt    DateTime?
+
+  documents          Document[]
+  members            ProjectMember[]
+  mandayPlan         MandayPlan?
+  tasks              ProjectTask[]
+  bugs               ProjectBug[]
+  testScripts        TestScript[]
+  testCaptures       TestScriptCapture[]
+  implementationPlan ImplementationPlan?
+
+  /// When the task list was first filled from the mandays estimate.
+  ///
+  /// A marker rather than a count of `tasks`: the seed runs once, and once is
+  /// decided by whether it has run, not by whether anything survived it.
+  /// Without this, deleting every task would quietly bring them all back on the
+  /// next visit — a delete that undoes itself is worse than no delete at all.
+  tasksSeededAt DateTime?
+
+  /// The only person who may delete the project — see WorkspaceService.removeProject.
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// A soft delete, like Document's: the project leaves every list and every
+  /// route answers 404, but its documents and their versions stay for audit.
+  /// The code is released on delete (rewritten with a suffix) so the
+  /// `(nodeId, code)` pair can be used again; the audit record keeps the original.
+  deletedAt DateTime?
+
+  @@unique([nodeId, code])
+  @@index([nodeId, updatedAt])
+  @@index([stage])
+  @@map("projects")
+}
+
+/// What state a document is in, mirrored by DOCUMENT_STATUSES in @dtrace/shared.
+enum DocumentStatus {
+  DRAFT
+  ON_PROGRESS
+  REVIEW
+  FINAL
+}
+
+/// One document inside a project.
+///
+/// `templateId` is the master template it was produced from; it is `SetNull`
+/// rather than `Cascade` because retiring a template must never delete the
+/// documents already issued from it — the trail outlives the blueprint.
+/// A screen that answers a document rather than a page the document holds.
+///
+/// The estimate, the schedule, the task list and the bug list are all things a
+/// project produces, so they belong in its document list — but each is already
+/// a screen with its own rules, not a template to be filled in. A document may
+/// therefore point at one, and opening it goes there instead of to the editor.
+enum DocumentScreen {
+  MANDAYS
+  TIMELINE
+  TASKS
+  BUGS
+  SIT_SCRIPT
+  UAT_SCRIPT
+  IMPLEMENTATION_PLAN
+}
+
+model Document {
+  id    String @id @default(uuid()) @db.Uuid
+  title String
+
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  templateId String?           @db.Uuid
+  template   DocumentTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  /// Set when this row stands for one of the project's own screens. Mutually
+  /// exclusive with `templateId` in practice: a row is either a document to
+  /// fill in or a door to somewhere else, never both.
+  screen DocumentScreen?
+
+  /// Where it sits in the project's list. Fixed at creation — the seeded
+  /// checklist keeps its standard order and a new document goes to the end —
+  /// so saving a document never moves it; "last updated" is a column, not the order.
+  position Int @default(0)
+
+  /// The stage this document belongs to, so the project view can group by it.
+  stage  ProjectStage   @default(PREPARE)
+  status DocumentStatus @default(DRAFT)
+
+  ownerId   String? @db.Uuid
+  owner     User?   @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerName String?
+
+  /// Section content, keyed by the template section's `key`. Empty until filled.
+  content Json @default("{}")
+
+  /// Soft delete: a document an auditor may need is withdrawn, never erased.
+  deletedAt DateTime?
+
+  favorites   DocumentFavorite[]
+  permissions DocumentPermission[]
+  files       DocumentFile[]
+  versions    DocumentVersion[]
+
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId, updatedAt])
+  @@index([projectId, position])
+  @@index([deletedAt, updatedAt])
+  @@index([templateId])
+  @@map("documents")
+}
+
+/// A document someone has starred. Per user, so it is a personal shortcut and
+/// not a property of the document itself.
+model DocumentFavorite {
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  documentId String   @db.Uuid
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, documentId])
+  @@index([userId, createdAt])
+  @@map("document_favorites")
+}
+
+/// What someone does on a project, mirrored by PROJECT_JOB_ROLES in
+/// @dtrace/shared. This is the *job*, not the permission level: a BA and a QA
+/// are both Collaborators, they simply do different work.
+enum ProjectJobRole {
+  TL
+  PM
+  BA
+  IP_COMPLIANCE
+  IT_SECURITY
+  DEVELOPER
+  QA
+}
+
+/// One person on a project team.
+///
+/// Two separate facts live here on purpose. `jobRole` says what they do, and
+/// `projectRole` says what they may do — added members are COLLABORATOR
+/// because that is what contributing means, and a Manager or project Admin can
+/// raise it deliberately rather than by picking a job title.
+model ProjectMember {
+  id String @id @default(uuid()) @db.Uuid
+
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation("ProjectMembership", fields: [userId], references: [id], onDelete: Cascade)
+
+  jobRole     ProjectJobRole
+  projectRole ProjectRole    @default(COLLABORATOR)
+
+  addedById String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
+}
+
+/// A per-document override of what one member may do.
+///
+/// Absence means "inherit": the member's project role and node grant decide.
+/// A row present decides instead, in both directions — it is how a document is
+/// opened up to someone, and how one is withheld. `canView` false is the
+/// restriction the team screen calls by that name: the document disappears
+/// from their sidebar, their lists, and their API results.
+model DocumentPermission {
+  id String @id @default(uuid()) @db.Uuid
+
+  documentId String   @db.Uuid
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  user   User   @relation("DocumentAccess", fields: [userId], references: [id], onDelete: Cascade)
+
+  canView   Boolean @default(true)
+  canCreate Boolean @default(false)
+  canEdit   Boolean @default(false)
+  canDelete Boolean @default(false)
+
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([documentId, userId])
+  @@index([userId])
+  @@map("document_permissions")
+}
+
+/// Where a mandays estimate stands, mirrored by MANDAY_STATUSES in @dtrace/shared.
+enum MandayStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+/// The mandays estimate for one project.
+///
+/// One plan per project: an estimate that exists twice is two answers to the
+/// same question, and the schema refuses to hold both.
+model MandayPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  projectId String  @unique @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  module      String?
+  pic         String?
+  estimatedAt DateTime?
+
+  /// Which job roles get a column, in the order they are shown.
+  roles ProjectJobRole[]
+
+  status MandayStatus @default(DRAFT)
+
+  submittedAt   DateTime?
+  submittedById String?   @db.Uuid
+  decidedAt     DateTime?
+  decidedById   String?   @db.Uuid
+  decisionNote  String?
+
+  tasks MandayTask[]
+
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("manday_plans")
+}
+
+/// One line of the estimate, sitting under a project stage.
+model MandayTask {
+  id String @id @default(uuid()) @db.Uuid
+
+  planId String     @db.Uuid
+  plan   MandayPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  stage    ProjectStage
+  name     String
+  /// Order among its siblings — under its parent, or under its stage at the top.
+  position Int          @default(0)
+
+  /// A task may break down into sub-tasks, to any depth.
+  ///
+  /// Cascade on delete: removing "Project Kick Off" removes what it was broken
+  /// into. Leaving orphans behind would put rows in the grid with no number
+  /// and no way to reach them.
+  parentId String?      @db.Uuid
+  parent   MandayTask?  @relation("MandayTaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children MandayTask[] @relation("MandayTaskTree")
+
+  status MandayStatus @default(DRAFT)
+
+  /// When the work is scheduled, and how far it has got.
+  ///
+  /// These sit on the estimate's task because it is the same task — the plan
+  /// says how many days it should take, the schedule says when. They are
+  /// deliberately NOT governed by the plan's approval lock: an estimate stops
+  /// moving once it is submitted, but the calendar it was built against keeps
+  /// moving, and a timeline nobody may correct is a timeline nobody trusts.
+  startsAt        DateTime?
+  endsAt          DateTime?
+  progressPercent Int       @default(0)
+
+  /// Actual dates stay beside the plan rather than replacing it, preserving
+  /// the baseline needed to explain a late start or finish.
+  actualStartsAt DateTime?
+  actualEndsAt   DateTime?
+
+  efforts MandayEffort[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId, stage, position])
+  @@index([parentId])
+  @@map("manday_tasks")
+}
+
+/// Days estimated for one job role on one task. A row per cell rather than a
+/// JSON blob, so totals are a sum in the database instead of in three places.
+model MandayEffort {
+  id String @id @default(uuid()) @db.Uuid
+
+  taskId String     @db.Uuid
+  task   MandayTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  jobRole ProjectJobRole
+  /// Three decimals preserve the smallest supported estimate: 0.125 day.
+  days    Decimal        @default(0) @db.Decimal(7, 3)
+
+  @@unique([taskId, jobRole])
+  @@map("manday_efforts")
+}
+
+/// A file uploaded against a document.
+///
+/// A row per upload rather than columns on `Document`: a document that is
+/// replaced keeps its earlier file, which is what makes "the version we sent
+/// them in March" answerable. The bytes live on disk under `UPLOAD_DIR`;
+/// `storageKey` is the generated name there, never the name the user typed —
+/// an uploaded filename is attacker-controlled and has no business being a
+/// path.
+model DocumentFile {
+  id String @id @default(uuid()) @db.Uuid
+
+  documentId String   @db.Uuid
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// The name as uploaded, shown to people and used for the download.
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  /// Opaque name on disk, generated here.
+  storageKey String @unique
+
+  /// ATTACHMENT is a file in the document's file list; CONTENT_IMAGE is a picture
+  /// embedded in a rich-text section — kept out of that list, and the only
+  /// kind besides PDF that is ever served inline.
+  purpose DocumentFilePurpose @default(ATTACHMENT)
+
+  uploadedById   String?  @db.Uuid
+  uploadedByName String?
+  createdAt      DateTime @default(now())
+
+  @@index([documentId, createdAt])
+  @@map("document_files")
+}
+
+enum DocumentFilePurpose {
+  ATTACHMENT
+  CONTENT_IMAGE
+}
+
+/// One saved state of a document's contents.
+///
+/// Append-only, like the audit trail it exists to serve: a save writes a new
+/// row, nothing ever updates or deletes one, and restoring an old version
+/// writes *another* new row carrying the old content. History that can be
+/// rewritten is not history, and the one question this table has to answer —
+/// "what did this document say when it was approved?" — depends on that.
+///
+/// `Document.content` is the latest version's content, kept alongside so the
+/// common read costs no join.
+model DocumentVersion {
+  id String @id @default(uuid()) @db.Uuid
+
+  documentId String   @db.Uuid
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  /// 1-based, contiguous within a document.
+  version Int
+  /// Section contents keyed by the template section's `key`.
+  content Json
+
+  /// What changed, in the author's words. Optional; the diff is the record.
+  note   String?
+  /// The document's status at the moment it was saved.
+  status DocumentStatus @default(DRAFT)
+
+  /// Set when this version was produced by restoring an earlier one.
+  restoredFrom Int?
+
+  createdById   String?  @db.Uuid
+  createdByName String?
+  createdAt     DateTime @default(now())
+
+  @@unique([documentId, version])
+  @@index([documentId, createdAt])
+  @@map("document_versions")
+}
+
+/// What a notification is about, mirrored by NOTIFICATION_KINDS in @dtrace/shared.
+enum NotificationKind {
+  MANDAY_SUBMITTED
+  MANDAY_APPROVED
+  MANDAY_REJECTED
+}
+
+/// One notification, addressed to one person.
+///
+/// A row per recipient rather than one row fanned out at read time: "have I
+/// read this" is a property of the reader, not of the event, and a shared row
+/// would have nowhere to put it. It also means a recipient list is decided
+/// once, when the thing happened, instead of being recomputed later against
+/// permissions that may since have changed.
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   User   @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  kind  NotificationKind
+  title String
+  body  String?
+  /// Where clicking it goes, as an app-relative path.
+  link  String?
+
+  /// What it is about, for de-duplication and for the link.
+  entity   String?
+  entityId String? @db.Uuid
+
+  /// Who caused it. Denormalised so the line survives the account going away.
+  actorName String?
+
+  readAt    DateTime?
+  /// Null when mail was not configured; set once the message is handed to SMTP.
+  emailedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([entity, entityId])
+  @@map("notifications")
+}
+
+/// How a person chose to sign: drawn by hand, typed, or a scannable code.
+enum SignatureKind {
+  DRAWN
+  TYPED
+  BARCODE
+}
+
+/// One person's signature, kept out of the `User` row on purpose.
+///
+/// `USER_PUBLIC_SELECT` is an allow-list, but a signature is the kind of
+/// personal mark that should not be one `select: true` away from every user
+/// list in the app. A separate table makes that leak impossible rather than
+/// merely unlikely: reading it takes a deliberate join.
+model UserSignature {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @unique @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  kind SignatureKind
+
+  /// DRAWN: a PNG data URL. TYPED: the text as it should read.
+  /// BARCODE: empty — there is nothing to keep but the code below.
+  data String?
+
+  /// TYPED only: which script face renders the name.
+  font String?
+
+  /// BARCODE only. Generated once and never regenerated, so a code already
+  /// printed on a document keeps resolving to the same person.
+  code String? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_signatures")
+}
+
+enum DevStatus {
+  UNREADY
+  WAITING_CONFIRM_USER
+  READY
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TestStatus {
+  REOPENED
+  WAITING_DEVELOPMENT
+  READY
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+/// One line of work in a project, followed through development and testing.
+///
+/// The two halves are separate columns rather than one status because they
+/// move independently — a task can be Closed Dev and Re-Opened by test at the
+/// same time, and one field would have to pick which of those is true.
+///
+/// Plan and actual dates are both kept. A plan overwritten the moment it slips
+/// still answers "when will this be done" but no longer answers "was it late",
+/// which is the question a project review actually asks.
+model ProjectTask {
+  id String @id @default(uuid()) @db.Uuid
+
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Free text: the modules of an HRIS are not the modules of a migration.
+  module      String
+  category    String?
+  description String
+  priority    TaskPriority @default(MEDIUM)
+
+  assigneeId String? @db.Uuid
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  devPlanStart   DateTime?
+  devPlanEnd     DateTime?
+  devActualStart DateTime?
+  devActualEnd   DateTime?
+  devCompletion  Int       @default(0)
+  devStatus      DevStatus @default(UNREADY)
+
+  testPlanStart   DateTime?
+  testPlanEnd     DateTime?
+  testActualStart DateTime?
+  testActualEnd   DateTime?
+  testCompletion  Int        @default(0)
+  testStatus      TestStatus @default(WAITING_DEVELOPMENT)
+
+  remark String?
+
+  /// Order within the project, so the list keeps the sequence it was entered in.
+  position Int @default(0)
+
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([projectId, position])
+  @@index([projectId, devStatus])
+  @@index([projectId, testStatus])
+  @@map("project_tasks")
+}
+
+/// Mirrors BUG_ENVIRONMENTS in @dtrace/shared. Ordered: how far along the road
+/// to production the bug was found.
+enum BugEnvironment {
+  SIT
+  UAT
+  PROD
+}
+
+/// Mirrors BUG_STATUSES in @dtrace/shared.
+enum BugStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING_TEST
+  IN_QA
+  DONE
+}
+
+enum BugSeverity {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+/// One entry in a project's Bug & Issue list: found in an environment, fixed by
+/// a developer, verified by QA.
+///
+/// `number` is per project and never reused — a soft delete keeps the row, so
+/// `BUG-007` quoted in a chat never comes to mean a different bug. That is also
+/// why the delete is soft where a task's is not: a bug list is evidence of what
+/// went wrong, and a task list is a plan.
+model ProjectBug {
+  id String @id @default(uuid()) @db.Uuid
+
+  projectId String  @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  number Int
+
+  title       String
+  description String?
+  module      String?
+
+  environment BugEnvironment
+  severity    BugSeverity    @default(MEDIUM)
+  status      BugStatus      @default(OPEN)
+
+  developerId String? @db.Uuid
+  developer   User?   @relation("BugDeveloper", fields: [developerId], references: [id], onDelete: SetNull)
+  qaId        String? @db.Uuid
+  qa          User?   @relation("BugQa", fields: [qaId], references: [id], onDelete: SetNull)
+
+  /// Calendar days, stored as midnight UTC like a task's plan dates.
+  foundAt DateTime
+  fixEta  DateTime?
+
+  /// Stamped by the server on a status move, never sent by the browser: the
+  /// QA queue measures waiting time from the first, the timeline ends at the
+  /// second, and a date somebody typed would measure nothing.
+  readyForTestAt DateTime?
+  resolvedAt     DateTime?
+
+  reportedById String? @db.Uuid
+  reportedBy   User?   @relation("BugReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([projectId, number])
+  @@index([projectId, environment])
+  @@index([developerId])
+  @@map("project_bugs")
+}
+
+/// A non-working day, so a schedule can step over it.
+///
+/// Kept per country because the platform may one day run projects elsewhere,
+/// and a holiday table with no country is a table that silently means "here".
+/// `date` is a bare date, not a timestamp: a public holiday has no time of
+/// day, and storing one would make every comparison depend on a timezone.
+model Holiday {
+  id String @id @default(uuid()) @db.Uuid
+
+  date        DateTime @db.Date
+  name        String
+  countryCode String   @db.VarChar(2)
+
+  /// IMPORTED rows come from the public-holiday API and are replaced wholesale
+  /// on the next sync; MANUAL rows are somebody's decision and survive it.
+  source HolidaySource @default(IMPORTED)
+
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([countryCode, date])
+  @@index([countryCode, date])
+  @@map("holidays")
+}
+
+enum HolidaySource {
+  IMPORTED
+  MANUAL
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+/// An invitation for somebody who has no account yet.
+///
+/// The link's secret is never stored — only its SHA-256 hash, the same way a
+/// session token is handled. A leaked database therefore yields no working
+/// invitation links, and the secret exists solely in the email that was sent.
+model Invitation {
+  id String @id @default(uuid()) @db.Uuid
+
+  email String
+
+  /// SHA-256 of the token that travels in the link. Unique so a lookup is one
+  /// indexed read rather than a scan with a timing signal.
+  tokenHash String @unique
+
+  status    InvitationStatus @default(PENDING)
+  expiresAt DateTime
+
+  /// The project and role the invitation grants on acceptance. Both optional:
+  /// somebody may be invited to the platform without a project in mind.
+  projectId String?         @db.Uuid
+  jobRole   ProjectJobRole?
+
+  invitedById String? @db.Uuid
+  invitedBy   User?   @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  acceptedAt     DateTime?
+  acceptedUserId String?   @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([projectId, status])
+  @@map("invitations")
+}
+
+enum TestScriptKind {
+  SIT
+  UAT
+}
+
+enum TestScriptStatus {
+  DRAFT
+  SUBMITTED
+}
+
+/// A project's SIT or UAT script: modules, sub-sections and scenarios, with
+/// the result of running each one.
+///
+/// One row per (project, kind), saved whole. The scenarios live in `content`
+/// as JSON rather than as rows of their own because they are always read,
+/// edited and exported together, and the order and nesting a tester built is
+/// part of what the document says. Written on the first save, not on the first
+/// visit — opening an empty script is not a change to the project.
+model TestScript {
+  id String @id @default(uuid()) @db.Uuid
+
+  projectId String         @db.Uuid
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      TestScriptKind
+
+  appName     String    @default("")
+  version     String    @default("")
+  /// A calendar day; the time part is always midnight UTC.
+  testDate    DateTime?
+  environment String    @default("STAGING")
+
+  /// `TestModuleView[]` — see test-script.schema.ts.
+  content Json @default("[]")
+
+  status        TestScriptStatus @default(DRAFT)
+  submittedAt   DateTime?
+  submittedById String?          @db.Uuid
+
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, kind])
+  @@map("test_scripts")
+}
+
+/// A screenshot attached to a test scenario.
+///
+/// Keyed by project and kind rather than by script, so a tester can attach
+/// evidence before the script's first save. Served inline, so — like template
+/// images — only sniffed raster types are ever stored.
+model TestScriptCapture {
+  id String @id @default(uuid()) @db.Uuid
+
+  projectId String         @db.Uuid
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      TestScriptKind
+
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String @unique
+
+  uploadedById String?  @db.Uuid
+  createdAt    DateTime @default(now())
+
+  @@index([projectId, kind])
+  @@map("test_script_captures")
+}
+
+enum ImplementationPlanStatus {
+  DRAFT
+  COMPLETED
+}
+
+/// A project's implementation plan: the cut-over runbook, phase by phase and
+/// step by step, with the estimated duration of each step beside what actually
+/// happened when it ran.
+///
+/// One row per project, saved whole, for the same reasons as `TestScript`: the
+/// steps are always read, edited and exported together, and their order is the
+/// schedule — each step starts where the one above it ended. Written on the
+/// first save, not on the first visit.
+model ImplementationPlan {
+  id String @id @default(uuid()) @db.Uuid
+
+  projectId String  @unique @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  serviceName        String    @default("")
+  /// A calendar day; the time part is always midnight UTC.
+  implementationDate DateTime?
+  /// `HH:MM` — where the estimated schedule starts counting.
+  startTime          String    @default("22:00")
+
+  /// `ImplementationHostView[]` — see implementation-plan.schema.ts.
+  hosts   Json @default("[]")
+  /// `ImplementationPhaseView[]` — see implementation-plan.schema.ts.
+  content Json @default("[]")
+
+  status        ImplementationPlanStatus @default(DRAFT)
+  completedAt   DateTime?
+  completedById String?                  @db.Uuid
+
+  /// The first time the plan was marked complete — the cut-over. Set once and
+  /// never cleared: any later save returns the plan to DRAFT and clears
+  /// `completedAt`, but a project that went live has still gone live, and the
+  /// Bug & Issue list reads this to know the project has reached production.
+  firstCompletedAt DateTime?
+
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("implementation_plans")
+}

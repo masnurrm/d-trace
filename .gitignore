@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# generated
+apps/api/src/generated/
+coverage/
+.nyc_output/
+
+# env — NEVER commit real secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# logs
+*.log
+npm-debug.log*
+logs/
+
+# editor / os
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# caches
+.turbo/
+.eslintcache
+.cache/
+
+# Uploaded document files; content, never source.
+apps/api/storage/

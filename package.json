@@ -1,0 +1,50 @@
+{
+  "name": "dtrace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "D-Trace — traceability platform. Next.js frontend + NestJS backend in an npm workspaces monorepo.",
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n shared,api,web -c magenta,cyan,green \"npm:dev:shared\" \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:shared": "npm run dev --workspace @dtrace/shared",
+    "dev:api": "npm run start:dev --workspace @dtrace/api",
+    "dev:web": "npm run dev --workspace @dtrace/web",
+    "build": "npm run build --workspace @dtrace/shared && npm run build --workspace @dtrace/api && npm run build --workspace @dtrace/web",
+    "build:shared": "npm run build --workspace @dtrace/shared",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,css}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,md,css}\" --ignore-path .gitignore",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @dtrace/api",
+    "db:migrate": "npm run db:migrate --workspace @dtrace/api",
+    "db:seed": "npm run db:seed --workspace @dtrace/api",
+    "db:seed:templates": "npm run db:seed:templates --workspace @dtrace/api",
+    "db:studio": "npm run db:studio --workspace @dtrace/api",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "clean": "rimraf \"**/node_modules\" \"**/dist\" \"**/.next\" \"**/.turbo\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.2",
+    "prettier": "^3.4.2",
+    "rimraf": "^6.0.1"
+  },
+  "overrides": {
+    "mysql2": "^3.24.4",
+    "deepmerge-ts": "^8.0.2"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true,
+    "prisma@7.10.0": true,
+    "unrs-resolver@1.12.2": true
+  }
+}

@@ -1,0 +1,33 @@
+# Local development dependencies for D-Trace.
+# Production runs managed services; this file exists so `npm run docker:up`
+# gives every developer the same database without installing anything.
+
+# An explicit project name keeps the container and volume names stable no matter
+# what the folder is called, and keeps them separate from any other compose
+# project on the machine.
+name: dtrace
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dtrace
+      POSTGRES_PASSWORD: dtrace
+      POSTGRES_DB: dtrace
+      # Scrypt password hashing for the database role itself.
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      # Bound to localhost only: the database must never be reachable from the
+      # network just because someone ran docker compose up on a laptop.
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dtrace-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dtrace -d dtrace"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dtrace-postgres-data:
