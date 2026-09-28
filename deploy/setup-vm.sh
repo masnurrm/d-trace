@@ -2,24 +2,38 @@
 #
 # D-Trace — fresh Ubuntu 24.04 VM bootstrap.
 #
-# Takes a bare VM to a running app: system packages, Node.js, PostgreSQL,
-# the app cloned/built, migrated, seeded, and running under systemd
-# (optionally behind Nginx + Let's Encrypt).
+# Run this FROM an already-cloned checkout of the repo (not standalone):
 #
-# Usage (as a sudo-capable user, NOT root directly — the script re-execs
-# itself with sudo where needed):
-#   REPO_URL=https://github.com/<you>/d-trace.git DOMAIN=trace.example.com \
-#     ./setup-vm.sh
+#   sudo git clone https://github.com/<you>/d-trace.git /opt/dtrace
+#   cd /opt/dtrace
+#   sudo ./deploy/setup-vm.sh
+#
+# Takes that checkout to a running app: system packages, Node.js, PostgreSQL,
+# built, migrated, seeded, and running under systemd, behind Nginx on 443.
+# For every deploy after this first one, use ./deploy/redeploy.sh instead —
+# it pulls, rebuilds and restarts in place.
+#
+# TLS_MODE picks how HTTPS is terminated (auto-detected, or set explicitly):
+#   - DOMAIN set            -> "letsencrypt": real CA cert for that domain.
+#       sudo DOMAIN=trace.example.com LETSENCRYPT_EMAIL=you@example.com ./deploy/setup-vm.sh
+#   - DOMAIN unset (default) -> "selfsigned": browsers will warn "not secure"
+#     and need a one-time click-through, but traffic is still encrypted.
+#     This is what you get accessing the app as https://<vm-ip> — Let's
+#     Encrypt flatly refuses to certify a bare IP address, only real domains
+#     it can verify over DNS, so a trusted cert isn't possible without one.
+#   - TLS_MODE=none          -> plain HTTP on $WEB_PORT, no Nginx at all.
 #
 # Safe to re-run: every step checks whether it already happened.
 #
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # ---------------------------------------------------------------------------
 # Configuration — override any of these via environment variables.
 # ---------------------------------------------------------------------------
-REPO_URL="${REPO_URL:-}"                       # required: git remote to clone
-APP_DIR="${APP_DIR:-/opt/dtrace}"              # where the app lives on disk
+APP_DIR="${APP_DIR:-$REPO_ROOT}"               # defaults to the checkout this script lives in
 APP_USER="${APP_USER:-dtrace}"                 # dedicated system user, no login shell
 NODE_MAJOR="${NODE_MAJOR:-22}"                 # matches .nvmrc / package.json engines
 PG_MAJOR="${PG_MAJOR:-17}"                     # matches docker-compose.yml
@@ -27,9 +41,10 @@ DB_NAME="${DB_NAME:-dtrace}"
 DB_USER="${DB_USER:-dtrace}"
 API_PORT="${API_PORT:-4000}"
 WEB_PORT="${WEB_PORT:-3000}"
-GIT_BRANCH="${GIT_BRANCH:-main}"
-DOMAIN="${DOMAIN:-}"                           # set to enable Nginx + HTTPS
+DOMAIN="${DOMAIN:-}"                           # set for a real Let's Encrypt cert
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"      # required if DOMAIN is set
+TLS_MODE="${TLS_MODE:-}"                       # letsencrypt | selfsigned | none — see header
+SERVER_IP="${SERVER_IP:-}"                     # self-signed cert SAN; auto-detected if unset
 SEED_ADMIN_EMAIL="${SEED_ADMIN_EMAIL:-admin@dtrace.local}"
 ENV_DIR="/etc/dtrace"                          # secrets live outside the repo checkout
 STATE_DIR="/var/lib/dtrace-setup"              # idempotency markers
@@ -38,11 +53,32 @@ log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[1;33m!! %s\033[0m\n' "$1"; }
 die()  { printf '\033[1;31mxx %s\033[0m\n' "$1"; exit 1; }
 
-[[ $EUID -eq 0 ]] || die "Run this with sudo: sudo REPO_URL=... ./setup-vm.sh"
-[[ -n "$REPO_URL" ]] || die "Set REPO_URL to your git remote, e.g. REPO_URL=git@github.com:you/d-trace.git"
-if [[ -n "$DOMAIN" && -z "$LETSENCRYPT_EMAIL" ]]; then
-  die "DOMAIN is set but LETSENCRYPT_EMAIL is not — certbot needs an email for renewal notices."
+[[ $EUID -eq 0 ]] || die "Run this with sudo: sudo ./deploy/setup-vm.sh"
+[[ -d "$APP_DIR/.git" ]] \
+  || die "$APP_DIR is not a git checkout — clone the repo first, then run this script from inside it."
+[[ -f "$APP_DIR/package.json" ]] \
+  || die "$APP_DIR doesn't look like the d-trace repo (no package.json)."
+if [[ -n "$DOMAIN" ]]; then
+  TLS_MODE="${TLS_MODE:-letsencrypt}"
+else
+  TLS_MODE="${TLS_MODE:-selfsigned}"
 fi
+[[ "$TLS_MODE" =~ ^(letsencrypt|selfsigned|none)$ ]] \
+  || die "TLS_MODE must be letsencrypt, selfsigned or none (got: $TLS_MODE)"
+if [[ "$TLS_MODE" == letsencrypt ]]; then
+  [[ -n "$DOMAIN" ]] || die "TLS_MODE=letsencrypt needs DOMAIN set."
+  [[ -n "$LETSENCRYPT_EMAIL" ]] || die "TLS_MODE=letsencrypt needs LETSENCRYPT_EMAIL set (certbot requires it for renewal notices)."
+fi
+if [[ "$TLS_MODE" == selfsigned && -z "$SERVER_IP" ]]; then
+  SERVER_IP="$(hostname -I | awk '{print $1}')"
+  [[ -n "$SERVER_IP" ]] || die "Could not auto-detect this VM's IP — set SERVER_IP explicitly."
+fi
+
+case "$TLS_MODE" in
+  letsencrypt) PUBLIC_ORIGIN="https://${DOMAIN}" ;;
+  selfsigned)  PUBLIC_ORIGIN="https://${SERVER_IP}" ;;
+  none)        PUBLIC_ORIGIN="http://localhost:${WEB_PORT}" ;;
+esac
 
 mkdir -p "$STATE_DIR" "$ENV_DIR"
 chmod 700 "$ENV_DIR"
@@ -150,19 +186,14 @@ if ! id "$APP_USER" >/dev/null 2>&1; then
 else
   echo "already exists, skipping"
 fi
-mkdir -p "$APP_DIR"
-chown "$APP_USER:$APP_USER" "$APP_DIR"
 
 # ---------------------------------------------------------------------------
-log "Fetch / update source ($GIT_BRANCH)"
+log "Hand the checkout at ${APP_DIR} to ${APP_USER}"
 # ---------------------------------------------------------------------------
-if [[ -d "$APP_DIR/.git" ]]; then
-  sudo -u "$APP_USER" git -C "$APP_DIR" fetch origin "$GIT_BRANCH"
-  sudo -u "$APP_USER" git -C "$APP_DIR" checkout "$GIT_BRANCH"
-  sudo -u "$APP_USER" git -C "$APP_DIR" reset --hard "origin/$GIT_BRANCH"
-else
-  sudo -u "$APP_USER" git clone --branch "$GIT_BRANCH" "$REPO_URL" "$APP_DIR"
-fi
+# systemd runs the app as $APP_USER, and redeploy.sh later does `git fetch` /
+# `npm ci` as that same user — it needs to own the checkout, not just read it.
+git config --global --add safe.directory "$APP_DIR"
+chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 
 # ---------------------------------------------------------------------------
 log "Environment files"
@@ -179,7 +210,7 @@ API_VERSION=1
 
 DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost:5432/${DB_NAME}?schema=public"
 
-CORS_ORIGINS=$( [[ -n "$DOMAIN" ]] && echo "https://${DOMAIN}" || echo "http://localhost:${WEB_PORT}" )
+CORS_ORIGINS=${PUBLIC_ORIGIN}
 
 JWT_ACCESS_SECRET=$(gen_secret)
 JWT_REFRESH_SECRET=$(gen_secret)
@@ -314,16 +345,29 @@ systemctl enable --now dtrace-api dtrace-web
 log "Firewall"
 # ---------------------------------------------------------------------------
 ufw allow OpenSSH >/dev/null
-if [[ -n "$DOMAIN" ]]; then
+if [[ "$TLS_MODE" == none ]]; then
+  ufw allow "${WEB_PORT}/tcp" >/dev/null
+else
   ufw allow 80/tcp >/dev/null
   ufw allow 443/tcp >/dev/null
-else
-  ufw allow "${WEB_PORT}/tcp" >/dev/null
 fi
 ufw --force enable >/dev/null
 
 # ---------------------------------------------------------------------------
-if [[ -n "$DOMAIN" ]]; then
+NGINX_COMMON='
+    location / {
+        proxy_pass http://127.0.0.1:__WEB_PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }'
+NGINX_COMMON="${NGINX_COMMON//__WEB_PORT__/$WEB_PORT}"
+
+if [[ "$TLS_MODE" == letsencrypt ]]; then
   log "Nginx reverse proxy + Let's Encrypt ($DOMAIN)"
   apt-get install -y nginx certbot python3-certbot-nginx
 
@@ -331,17 +375,7 @@ if [[ -n "$DOMAIN" ]]; then
 server {
     listen 80;
     server_name ${DOMAIN};
-
-    location / {
-        proxy_pass http://127.0.0.1:${WEB_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
+${NGINX_COMMON}
 }
 NGINX
   ln -sf /etc/nginx/sites-available/dtrace /etc/nginx/sites-enabled/dtrace
@@ -349,13 +383,55 @@ NGINX
   nginx -t && systemctl reload nginx
 
   certbot --nginx -d "$DOMAIN" -m "$LETSENCRYPT_EMAIL" --agree-tos --redirect --non-interactive
+
+elif [[ "$TLS_MODE" == selfsigned ]]; then
+  log "Nginx reverse proxy + self-signed cert (https://${SERVER_IP})"
+  apt-get install -y nginx
+
+  CERT_DIR=/etc/nginx/ssl
+  mkdir -p "$CERT_DIR"
+  chmod 700 "$CERT_DIR"
+  if [[ ! -f "$CERT_DIR/dtrace.crt" ]]; then
+    # SAN carries the IP explicitly — without it, modern browsers reject the
+    # cert outright (an "not secure, click through" warning turns into a hard
+    # block) because they no longer trust a bare CN match.
+    openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
+      -keyout "$CERT_DIR/dtrace.key" -out "$CERT_DIR/dtrace.crt" \
+      -subj "/CN=${SERVER_IP}" \
+      -addext "subjectAltName=IP:${SERVER_IP}"
+    chmod 600 "$CERT_DIR/dtrace.key"
+  fi
+
+  cat > "/etc/nginx/sites-available/dtrace" <<NGINX
+server {
+    listen 80;
+    server_name _;
+    return 301 https://\$host\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name _;
+
+    ssl_certificate     ${CERT_DIR}/dtrace.crt;
+    ssl_certificate_key ${CERT_DIR}/dtrace.key;
+${NGINX_COMMON}
+}
+NGINX
+  ln -sf /etc/nginx/sites-available/dtrace /etc/nginx/sites-enabled/dtrace
+  rm -f /etc/nginx/sites-enabled/default
+  nginx -t && systemctl reload nginx
 fi
 
 # ---------------------------------------------------------------------------
 log "Done"
 # ---------------------------------------------------------------------------
 echo "API:  systemctl status dtrace-api   (127.0.0.1:${API_PORT}, not public)"
-echo "Web:  systemctl status dtrace-web   ($( [[ -n "$DOMAIN" ]] && echo "https://${DOMAIN}" || echo "http://<vm-ip>:${WEB_PORT}" ))"
+case "$TLS_MODE" in
+  letsencrypt) echo "Web:  systemctl status dtrace-web   (https://${DOMAIN})" ;;
+  selfsigned)  echo "Web:  systemctl status dtrace-web   (https://${SERVER_IP} — browser will warn: self-signed cert, click through once)" ;;
+  none)        echo "Web:  systemctl status dtrace-web   (http://<vm-ip>:${WEB_PORT})" ;;
+esac
 echo "Logs: journalctl -u dtrace-api -f   /   journalctl -u dtrace-web -f"
 echo "Env:  ${ENV_DIR}/  (api.env, web.env, db_password) — back these up, they are NOT in the repo"
 if ! step_done db-seed-notice; then

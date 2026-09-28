@@ -11,7 +11,10 @@
 #
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/opt/dtrace}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+
+APP_DIR="${APP_DIR:-$REPO_ROOT}"
 APP_USER="${APP_USER:-dtrace}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 ENV_DIR="/etc/dtrace"
