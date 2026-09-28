@@ -198,6 +198,12 @@ chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 # ---------------------------------------------------------------------------
 log "Environment files"
 # ---------------------------------------------------------------------------
+# ENV_DIR was created (mkdir) as root, mode 700 — a file inside owned by
+# $APP_USER is still unreadable to $APP_USER until the *directory* itself is
+# also owned by $APP_USER, since traversal is checked at each path segment.
+# Unconditional so a re-run also fixes a checkout provisioned before this.
+chown "$APP_USER:$APP_USER" "$ENV_DIR"
+
 API_ENV="$ENV_DIR/api.env"
 if [[ ! -f "$API_ENV" ]]; then
   cat > "$API_ENV" <<ENV
