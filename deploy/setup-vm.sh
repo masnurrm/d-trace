@@ -342,6 +342,10 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 ProtectSystem=strict
+# Next's own image-optimization cache (next/image) writes here at runtime —
+# without it listed, ProtectSystem=strict makes the whole tree read-only and
+# every optimized image fails its write with ENOENT, retrying on every request.
+ReadWritePaths=${APP_DIR}/apps/web/.next/cache
 ProtectHome=true
 
 [Install]
