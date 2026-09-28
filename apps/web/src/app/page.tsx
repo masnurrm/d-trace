@@ -14,4 +14,11 @@ export default async function HomePage() {
   if (!user) redirect('/login');
 
   redirect(MODE_HOME[defaultModeFor((user.role ?? ROLES.VIEWER) as Role)]);
+
+  // Unreachable — redirect() always throws. A page with zero JSX output can
+  // fail to get a client reference manifest generated for it at all (a known
+  // Next.js/Turbopack edge case: "client reference manifest for route ...
+  // does not exist"), so this exists purely to give the route real render
+  // output for the bundler to key a manifest on.
+  return null;
 }

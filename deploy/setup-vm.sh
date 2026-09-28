@@ -273,6 +273,10 @@ ln -sf "$WEB_ENV" "$APP_DIR/apps/web/.env"
 log "Install dependencies and build"
 # ---------------------------------------------------------------------------
 sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && npm ci"
+# See redeploy.sh: a stale Turbopack build cache has been observed to break
+# a route's client reference manifest after its dynamic/static classification
+# changes, so every build starts clean rather than trusting the cache.
+sudo -u "$APP_USER" rm -rf "$APP_DIR/apps/web/.next"
 sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && npm run build"
 verify_build
 

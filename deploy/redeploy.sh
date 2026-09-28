@@ -58,6 +58,12 @@ sudo -u "$APP_USER" git -C "$APP_DIR" reset --hard "origin/$GIT_BRANCH"
 
 log "Install dependencies and build"
 sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && npm ci"
+# Turbopack's persistent build cache (apps/web/.next/cache) survives across
+# redeploys for speed, but a route's static/dynamic classification changing
+# between deploys has been observed to leave it in an inconsistent state —
+# a stale/missing client reference manifest for a route that build otherwise
+# reports as successful. A full build is slower but always correct.
+sudo -u "$APP_USER" rm -rf "$APP_DIR/apps/web/.next"
 sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && npm run build"
 verify_build
 
