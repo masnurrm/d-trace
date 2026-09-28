@@ -1,6 +1,10 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
+// See (auth)/login/page.tsx: a statically prerendered page's CSP nonce is
+// fixed at build time and can never match proxy.ts's per-request nonce.
+export const dynamic = 'force-dynamic';
+
 export default function NotFound() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
