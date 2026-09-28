@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { loginSchema, type LoginInput, type SessionUser } from '@dtrace/shared';
+import { loginSchema, ROLES, defaultModeFor, type LoginInput, type Role, type SessionUser } from '@dtrace/shared';
+import { MODE_HOME } from '@/components/layout/navigation';
 import { postAuth } from '@/lib/api/client';
 import { useFormMutation } from '@/lib/query/use-form-mutation';
 import { Alert } from '@/components/ui/alert';
@@ -63,17 +64,21 @@ export function LoginForm() {
   const { mutate, isPending, formError } = useFormMutation<LoginInput, { user: SessionUser }>({
     setError,
     mutationFn: (values) => postAuth<{ user: SessionUser }>('/login', values),
-    onSuccess: (_data, values) => {
+    onSuccess: (data, values) => {
       if (remember) window.localStorage.setItem(REMEMBERED_EMAIL_KEY, values.email);
       else window.localStorage.removeItem(REMEMBERED_EMAIL_KEY);
 
       // `next` is validated as a relative path: an open redirect here would
       // let a phishing link bounce a freshly signed-in user off-site.
       const next = searchParams.get('next');
-      // `/` forwards by role: a super admin into the Admin Panel, everyone else
-      // into their Workspace. Naming a half here would guess wrong for one of them.
+      // With no `next`, land directly on the account's half instead of routing
+      // through `/` (which only exists to do this same lookup server-side) —
+      // avoids a client-side navigation to a page whose entire body is a
+      // redirect, which Next/Turbopack has been unreliable about serving.
       const destination =
-        next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+        next && next.startsWith('/') && !next.startsWith('//')
+          ? next
+          : MODE_HOME[defaultModeFor((data.user.role ?? ROLES.VIEWER) as Role)];
 
       router.replace(dynamicRoute(destination));
       router.refresh();
