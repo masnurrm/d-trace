@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { HolidaysService } from '../holidays/holidays.service.js';
 import { MandayService } from './manday.service.js';
+import { ProjectStageService } from './project-stage.service.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
 
 const PLAN_INCLUDE = {
@@ -60,6 +61,7 @@ export class TimelineService {
     private readonly audit: AuditService,
     private readonly mandays: MandayService,
     private readonly holidays: HolidaysService,
+    private readonly projectStage: ProjectStageService,
   ) {}
 
   async getForProject(projectId: string, actor: AuthenticatedUser): Promise<ProjectTimelineView> {
@@ -204,6 +206,8 @@ export class TimelineService {
       after,
       metadata: { timelineTasksSaved: input.tasks.length },
     });
+
+    await this.projectStage.sync(projectId);
 
     return this.getForProject(projectId, actor);
   }

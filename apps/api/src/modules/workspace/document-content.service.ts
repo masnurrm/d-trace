@@ -24,6 +24,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { ProjectDataService } from './project-data.service.js';
+import { ProjectStageService } from './project-stage.service.js';
 import { ProjectTeamService } from './project-team.service.js';
 import { sanitizeDocumentContent } from './rich-text.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
@@ -69,6 +70,7 @@ export class DocumentContentService {
     private readonly team: ProjectTeamService,
     private readonly auditService: AuditService,
     private readonly projectData: ProjectDataService,
+    private readonly projectStage: ProjectStageService,
   ) {}
 
   async findById(id: string, actor: AuthenticatedUser): Promise<DocumentDetail> {
@@ -171,9 +173,7 @@ export class DocumentContentService {
     // package, which carries no runtime dependencies by design.
     const content = sanitizeDocumentContent(sections, parsed);
     if (issues.length > 0) {
-      throw AppException.validation(
-        issues.map((message) => ({ field: 'content', message })),
-      );
+      throw AppException.validation(issues.map((message) => ({ field: 'content', message })));
     }
 
     const previous = (current.content ?? {}) as DocumentContent;
@@ -232,6 +232,8 @@ export class DocumentContentService {
       userAgent: client.userAgent,
       metadata: { changedSections: changed, status },
     });
+
+    await this.projectStage.sync(current.project.id);
 
     return this.findById(id, actor);
   }
@@ -311,7 +313,7 @@ export class DocumentContentService {
     actor: AuthenticatedUser,
     client: ClientInfo,
   ): Promise<DocumentDetail> {
-    await this.requireEditable(id, actor);
+    const current = await this.requireEditable(id, actor);
 
     const source = await this.prisma.documentVersion.findUnique({
       where: { documentId_version: { documentId: id, version: input.version } },
@@ -354,6 +356,8 @@ export class DocumentContentService {
       userAgent: client.userAgent,
       metadata: { restoredFrom: source.version },
     });
+
+    await this.projectStage.sync(current.project.id);
 
     return this.findById(id, actor);
   }

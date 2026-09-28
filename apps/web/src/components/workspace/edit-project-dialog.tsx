@@ -3,12 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  PROJECT_STAGES,
-  PROJECT_STAGE_LABELS,
   PROJECT_STATUSES,
   PROJECT_STATUS_LABELS,
   updateProjectSchema,
-  type ProjectStage,
   type ProjectStatus,
   type ProjectView,
 } from '@dtrace/shared';
@@ -52,7 +49,6 @@ export function EditProjectDialog({ project, open, onClose }: EditProjectDialogP
     name: project.name,
     code: project.code,
     description: project.description ?? '',
-    stage: project.stage,
     status: project.status,
     startsAt: toInput(project.startsAt),
     goLiveAt: toInput(project.goLiveAt),
@@ -68,7 +64,6 @@ export function EditProjectDialog({ project, open, onClose }: EditProjectDialogP
       name: project.name,
       code: project.code,
       description: project.description ?? '',
-      stage: project.stage,
       status: project.status,
       startsAt: toInput(project.startsAt),
       goLiveAt: toInput(project.goLiveAt),
@@ -97,7 +92,6 @@ export function EditProjectDialog({ project, open, onClose }: EditProjectDialogP
     if ((form.description.trim() || null) !== project.description) {
       changes['description'] = form.description.trim() || null;
     }
-    if (form.stage !== project.stage) changes['stage'] = form.stage;
     if (form.status !== project.status) changes['status'] = form.status;
     if (startsAt !== project.startsAt) changes['startsAt'] = startsAt;
     if (goLiveAt !== project.goLiveAt) changes['goLiveAt'] = goLiveAt;
@@ -195,19 +189,7 @@ export function EditProjectDialog({ project, open, onClose }: EditProjectDialogP
           />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <SelectField
-            label="Tahapan"
-            value={form.stage}
-            options={PROJECT_STAGES.map((stage) => ({
-              value: stage,
-              label: PROJECT_STAGE_LABELS[stage],
-            }))}
-            hint="Tahapan yang dinyatakan, bukan yang dihitung dari dokumen."
-            onValueChange={(value) =>
-              setForm((current) => ({ ...current, stage: value as ProjectStage }))
-            }
-          />
+        <div>
           <SelectField
             label="Status project"
             value={form.status}

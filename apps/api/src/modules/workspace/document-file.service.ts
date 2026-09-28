@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-request
 import { AuditService } from '../audit/audit.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ProjectTeamService } from './project-team.service.js';
+import { ProjectStageService } from './project-stage.service.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
 
 /**
@@ -69,6 +70,7 @@ export class DocumentFileService {
     private readonly access: WorkspaceAccessService,
     private readonly team: ProjectTeamService,
     private readonly auditService: AuditService,
+    private readonly projectStage: ProjectStageService,
     config: ConfigService<AppConfig, true>,
   ) {
     const upload = config.get('upload', { infer: true });
@@ -155,6 +157,12 @@ export class DocumentFileService {
         metadata: { fileName: row.fileName, sizeBytes: row.sizeBytes, mimeType: row.mimeType },
       });
 
+      const document = await this.prisma.document.findUnique({
+        where: { id: documentId },
+        select: { projectId: true },
+      });
+      if (document) await this.projectStage.sync(document.projectId);
+
       return toStored(row);
     } catch (error) {
       // The row is the record of truth. A file on disk with nothing pointing at
@@ -238,11 +246,65 @@ export class DocumentFileService {
     return rows.map(toStored);
   }
 
+  /** Removes an incorrect attachment so the author can upload its replacement. */
+  async remove(fileId: string, actor: AuthenticatedUser, client: ClientInfo): Promise<void> {
+    const row = await this.prisma.documentFile.findUnique({ where: { id: fileId } });
+    if (!row || row.purpose !== 'ATTACHMENT') throw AppException.notFound('File');
+
+    const nodeId = await this.access.nodeIdOfDocument(row.documentId);
+    const access = await this.access.requireCapability(
+      actor.id,
+      actor.role as Role,
+      nodeId,
+      'viewDocument',
+    );
+    const override = await this.prisma.documentPermission.findUnique({
+      where: { documentId_userId: { documentId: row.documentId, userId: actor.id } },
+      select: { canView: true, canEdit: true },
+    });
+    if (override && !override.canView) throw AppException.notFound('File');
+    if (!(override ? override.canEdit : access.capabilities.createDocument)) {
+      throw AppException.forbidden('Anda tidak punya izin mengubah dokumen ini');
+    }
+
+    await this.prisma.documentFile.delete({ where: { id: fileId } });
+
+    const path = resolve(this.uploadDir, row.storageKey);
+    if (path.startsWith(this.uploadDir)) {
+      await unlink(path).catch((error: unknown) => {
+        this.logger.warn(
+          { error, fileId },
+          'Metadata file terhapus, tetapi berkas gagal dibersihkan',
+        );
+      });
+    }
+
+    await this.auditService.record({
+      action: AUDIT_ACTIONS.DOCUMENT_FILE_DELETED,
+      entity: 'Document',
+      entityId: row.documentId,
+      actorId: actor.id,
+      actorEmail: actor.email,
+      ip: client.ip,
+      userAgent: client.userAgent,
+      before: {
+        id: row.id,
+        fileName: row.fileName,
+        mimeType: row.mimeType,
+        sizeBytes: row.sizeBytes,
+      },
+    });
+  }
+
   /** The bytes of one file, for the download handler to stream. */
   async open(
     fileId: string,
     actor: AuthenticatedUser,
-  ): Promise<{ stream: ReturnType<typeof createReadStream>; file: StoredFile; inlineImage: boolean }> {
+  ): Promise<{
+    stream: ReturnType<typeof createReadStream>;
+    file: StoredFile;
+    inlineImage: boolean;
+  }> {
     const row = await this.prisma.documentFile.findUnique({ where: { id: fileId } });
     if (!row) throw AppException.notFound('File');
 

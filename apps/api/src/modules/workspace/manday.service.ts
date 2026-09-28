@@ -253,47 +253,6 @@ export class MandayService {
   }
 
   /** Submit for approval, or record the decision on a submitted plan. */
-  /**
-   * Moves the project out of Prepare once its estimate is settled.
-   *
-   * **Forward only, and only from PREPARE.** An estimate can be reopened and
-   * resubmitted long after the work has reached Develop, and dragging the
-   * project back to Define at that point would overwrite real progress with a
-   * side effect of a correction nobody thought of as a stage change.
-   *
-   * It is a row change of its own, so it gets its own audit record rather than
-   * hiding inside the plan's — "why did this project become Define?" is a
-   * question the trail should answer without anyone knowing to look at mandays.
-   */
-  private async advanceToDefine(
-    plan: PlanRow,
-    actor: AuthenticatedUser,
-    client: ClientInfo,
-  ): Promise<void> {
-    if (plan.project.stage !== 'PREPARE') return;
-
-    const before = { id: plan.project.id, name: plan.project.name, stage: plan.project.stage };
-
-    const after = await this.prisma.project.update({
-      where: { id: plan.project.id },
-      data: { stage: 'DEFINE' },
-      select: { id: true, name: true, stage: true },
-    });
-
-    await this.auditService.record({
-      action: AUDIT_ACTIONS.PROJECT_UPDATED,
-      entity: 'Project',
-      entityId: plan.project.id,
-      actorId: actor.id,
-      actorEmail: actor.email,
-      ip: client.ip,
-      userAgent: client.userAgent,
-      before,
-      after,
-      metadata: { reason: 'manday-plan-submitted' },
-    });
-  }
-
   async decide(
     projectId: string,
     input: SubmitMandayPlanInput,
@@ -354,8 +313,6 @@ export class MandayService {
       },
       include: PLAN_INCLUDE,
     });
-
-    if (input.status === 'SUBMITTED') await this.advanceToDefine(plan, actor, client);
 
     await this.auditService.record({
       action:
@@ -461,8 +418,7 @@ function toView(plan: PlanRow, canEdit: boolean, canApprove: boolean): MandayPla
   // `DEFINE` sorts before `PREPARE` in SQL, which is not the order work happens.
   tasks.sort(
     (a, b) =>
-      PROJECT_STAGES.indexOf(a.stage) - PROJECT_STAGES.indexOf(b.stage) ||
-      a.position - b.position,
+      PROJECT_STAGES.indexOf(a.stage) - PROJECT_STAGES.indexOf(b.stage) || a.position - b.position,
   );
 
   return {

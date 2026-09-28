@@ -7,6 +7,7 @@ node_modules/
 dist/
 build/
 .next/
+.next.stale-*/
 out/
 *.tsbuildinfo
 next-env.d.ts
@@ -30,8 +31,13 @@ logs/
 # editor / os
 .DS_Store
 Thumbs.db
+Desktop.ini
 .idea/
 *.swp
+*.swo
+
+# Office lock files (created while a .docx/.xlsx/.html is open elsewhere)
+~$*
 
 # caches
 .turbo/

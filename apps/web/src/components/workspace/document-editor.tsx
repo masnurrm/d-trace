@@ -35,6 +35,17 @@ const STATUS_TONES: Record<DocumentStatus, 'neutral' | 'info' | 'warning' | 'suc
   FINAL: 'success',
 };
 
+const DOCUMENT_TEMPLATE_DOWNLOADS: Record<string, { fileName: string; url: string }> = {
+  'Business Blueprint': {
+    fileName: 'Template_Business_Blueprint_Panduan.docx',
+    url: '/templates/Template_Business_Blueprint_Panduan.docx',
+  },
+  'Berita Acara Serah Terima (BAST)': {
+    fileName: 'Template_Berita_Acara_Serah_Terima_BAST.docx',
+    url: '/templates/Template_Berita_Acara_Serah_Terima_BAST.docx',
+  },
+};
+
 export interface DocumentEditorProps {
   document: DocumentDetail;
 }
@@ -75,6 +86,7 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
   const [preview, setPreview] = useState<DocumentVersionDetail | null>(null);
 
   const canEdit = document.capabilities.edit;
+  const templateDownload = DOCUMENT_TEMPLATE_DOWNLOADS[document.title];
   // A version being previewed is history: it is shown, never typed into.
   const readOnly = !canEdit || preview !== null;
 
@@ -321,9 +333,13 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
           <DocumentFileViewer
             documentId={document.id}
             canUpload={canEdit && !preview}
+            templateDownload={templateDownload}
+            uploadLabel={templateDownload ? 'Upload dokumen yang sudah diisi' : undefined}
             emptyHint={
               sections.length === 0
-                ? 'Dokumen ini dibuat tanpa template dan belum punya berkas. Unggah berkas untuk mengisinya.'
+                ? templateDownload
+                  ? 'Download template, lengkapi dokumennya, lalu unggah file yang sudah diisi.'
+                  : 'Dokumen ini dibuat tanpa template dan belum punya berkas. Unggah berkas untuk mengisinya.'
                 : undefined
             }
           />
@@ -333,22 +349,22 @@ export function DocumentEditor({ document }: DocumentEditorProps) {
           <div className="bg-slate-100 p-5 dark:bg-slate-950">
             <div className="mx-auto min-h-[600px] w-full max-w-[810px] bg-white p-7 text-slate-900 shadow-lg">
               <DocumentFillProvider context={document.context}>
-              {sections
-                .filter((section) => section.visible)
-                .map((section) => (
-                  <Fragment key={section.key}>
-                    <SectionField
-                      section={section}
-                      value={shown[section.key] ?? emptyContentFor(section.type)}
-                      onChange={(value) => update(section.key, value)}
-                      disabled={readOnly}
-                      documentId={document.id}
-                      liveData={document.projectData}
-                    />
-                    {/* Older API responses predate attachments; treat absent as none. */}
-                    <SectionAttachments attachments={section.attachments ?? []} />
-                  </Fragment>
-                ))}
+                {sections
+                  .filter((section) => section.visible)
+                  .map((section) => (
+                    <Fragment key={section.key}>
+                      <SectionField
+                        section={section}
+                        value={shown[section.key] ?? emptyContentFor(section.type)}
+                        onChange={(value) => update(section.key, value)}
+                        disabled={readOnly}
+                        documentId={document.id}
+                        liveData={document.projectData}
+                      />
+                      {/* Older API responses predate attachments; treat absent as none. */}
+                      <SectionAttachments attachments={section.attachments ?? []} />
+                    </Fragment>
+                  ))}
               </DocumentFillProvider>
             </div>
           </div>

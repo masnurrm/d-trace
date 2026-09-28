@@ -204,7 +204,7 @@ export class WorkspaceController {
   ): Promise<void> {
     await this.workspace.removeProject(id, actor, client);
   }
-/* ---------------------------------------------------------------- */
+  /* ---------------------------------------------------------------- */
   /* Team                                                              */
   /* ---------------------------------------------------------------- */
 
@@ -312,7 +312,10 @@ export class WorkspaceController {
 
   @Get('projects/:id/tasks')
   @ApiOperation({ summary: 'The module task list, whole — the screen filters it' })
-  projectTasks(@Param('id', zodPipe(idSchema)) id: string, @CurrentUser() actor: AuthenticatedUser) {
+  projectTasks(
+    @Param('id', zodPipe(idSchema)) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
     return this.tasks.listForProject(id, actor);
   }
 
@@ -374,7 +377,9 @@ export class WorkspaceController {
   }
 
   @Put('projects/:id/test-scripts/:kind')
-  @ApiOperation({ summary: 'Replace the script, optionally submitting it; refuses a stale version' })
+  @ApiOperation({
+    summary: 'Replace the script, optionally submitting it; refuses a stale version',
+  })
   saveTestScript(
     @Param('id', zodPipe(idSchema)) id: string,
     @Param('kind', zodPipe(testScriptKindSchema)) kind: TestScriptKind,
@@ -464,7 +469,7 @@ export class WorkspaceController {
   ) {
     return this.mandays.decide(id, body, actor, client);
   }
-/* ---------------------------------------------------------------- */
+  /* ---------------------------------------------------------------- */
   /* Files                                                             */
   /* ---------------------------------------------------------------- */
 
@@ -493,6 +498,17 @@ export class WorkspaceController {
       actor,
       client,
     );
+  }
+
+  @Delete('files/:fileId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove an incorrect document attachment' })
+  removeFile(
+    @Param('fileId', zodPipe(idSchema)) fileId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Client() client: ClientInfo,
+  ) {
+    return this.files.remove(fileId, actor, client);
   }
 
   @Post('documents/:id/images')
@@ -565,13 +581,16 @@ export class WorkspaceController {
 
     stream.pipe(response);
   }
-/* ---------------------------------------------------------------- */
+  /* ---------------------------------------------------------------- */
   /* Contents and history                                              */
   /* ---------------------------------------------------------------- */
 
   @Get('documents/:id')
   @ApiOperation({ summary: 'One document: its template shape and its answers' })
-  findDocument(@Param('id', zodPipe(idSchema)) id: string, @CurrentUser() actor: AuthenticatedUser) {
+  findDocument(
+    @Param('id', zodPipe(idSchema)) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
     return this.contents.findById(id, actor);
   }
 
@@ -588,7 +607,10 @@ export class WorkspaceController {
 
   @Get('documents/:id/versions')
   @ApiOperation({ summary: 'Every saved version, newest first' })
-  listVersions(@Param('id', zodPipe(idSchema)) id: string, @CurrentUser() actor: AuthenticatedUser) {
+  listVersions(
+    @Param('id', zodPipe(idSchema)) id: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
     return this.contents.listVersions(id, actor);
   }
 

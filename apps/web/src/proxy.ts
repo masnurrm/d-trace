@@ -152,7 +152,8 @@ export const config = {
      * refreshed for a data fetch just as it is for a page view.
      */
     {
-      source: '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+      source:
+        '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|doc|docx|xls|xlsx|ppt|pptx|zip)$).*)',
       missing: [{ type: 'header', key: 'next-action' }],
     },
   ],

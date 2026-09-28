@@ -1,7 +1,7 @@
 'use client';
 
 import { HERO_COLORS } from './palette';
-import type { TaskCounts } from './mock-data';
+import type { TaskCounts } from './dashboard-data';
 
 export interface HeroBucket {
   key: keyof typeof HERO_COLORS;

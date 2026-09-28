@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   ListPlus,
+  Pencil,
   Play,
   Plus,
   RotateCcw,
@@ -111,41 +112,15 @@ function clockFormatter(timeZone: string | undefined) {
   });
 }
 
-/** An instant as the browser's own wall clock, for a time input to edit. */
-function localClock(iso: string): string {
+/** An instant formatted for a browser-local `datetime-local` input. */
+function localDateTime(iso: string): string {
   const date = new Date(iso);
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function parseClock(value: string): [number, number, number] | null {
-  const match = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
-  if (!match) return null;
-  return [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)];
-}
-
-/** The same local day as `iso`, at another time of it. */
-function atClock(iso: string, value: string): string | null {
-  const clock = parseClock(value);
-  if (!clock) return null;
-  const date = new Date(iso);
-  date.setHours(clock[0], clock[1], clock[2], 0);
-  return date.toISOString();
-}
-
-/**
- * The first moment at `value` o'clock that is not before `startIso`.
- *
- * A finish typed as a time of day is read as the next such time after the
- * start: a step started at 23:50 and finished at 00:10 finished the next day,
- * not twenty-three hours before it began. A single step is never longer than
- * a day, so the next occurrence is always the right one.
- */
-function clockAfter(startIso: string, value: string): string | null {
-  const candidate = atClock(startIso, value);
-  if (!candidate) return null;
-  const date = new Date(candidate);
-  if (date.getTime() < Date.parse(startIso)) date.setDate(date.getDate() + 1);
-  return date.toISOString();
+function instantOfLocalDateTime(value: string): string | null {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 /** Ticks every second while `active`, so a running step's elapsed time moves. */
@@ -164,24 +139,6 @@ function useNow(active: boolean): number | null {
   }, [active]);
 
   return active ? now : null;
-}
-
-/** A clock reading after the start of the day, with `+1` when it falls on the next. */
-function EstimateClock({ minutes }: { minutes: number }) {
-  const { time, dayOffset } = clockOfMinutes(minutes);
-  return (
-    <span className="whitespace-nowrap tabular-nums">
-      {time}
-      {dayOffset > 0 && (
-        <sup
-          className="ml-0.5 text-[10px] font-semibold text-amber-600"
-          title={`${dayOffset} hari setelah tanggal implementasi`}
-        >
-          +{dayOffset}
-        </sup>
-      )}
-    </span>
-  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -438,8 +395,6 @@ export function ImplementationPlanEditor({
       ? (save.error.details?.[0]?.message ?? save.error.message)
       : save.error.message
     : null;
-
-  let number = 0;
 
   return (
     <div className="space-y-4">
@@ -737,7 +692,10 @@ export function ImplementationPlanEditor({
                   </tr>
 
                   {phase.steps.map((step, si) => {
-                    number += 1;
+                    const number =
+                      phases.slice(0, pi).reduce((total, item) => total + item.steps.length, 0) +
+                      si +
+                      1;
                     const estimate = schedule.steps[step.id] ?? { start: 0, end: 0 };
                     return (
                       <StepRow
@@ -960,24 +918,28 @@ function StepRow({
 
   function editStart(value: string) {
     if (!step.actualStartedAt) return;
-    const startedAt = atClock(step.actualStartedAt, value);
+    const startedAt = instantOfLocalDateTime(value);
     if (!startedAt) return;
-    // The finish keeps its time of day and is re-anchored after the new
-    // start, so moving a start never leaves the finish before it.
-    const finishedAt = step.actualFinishedAt
-      ? clockAfter(startedAt, localClock(step.actualFinishedAt))
-      : null;
+    const finishedAt =
+      step.actualFinishedAt && Date.parse(step.actualFinishedAt) >= Date.parse(startedAt)
+        ? step.actualFinishedAt
+        : null;
     onChange({
       actualStartedAt: startedAt,
       actualFinishedAt: finishedAt,
       actualDurationMinutes: null,
+      ...(step.actualFinishedAt && !finishedAt && step.status === 'DONE'
+        ? { status: 'IN_PROGRESS' as const }
+        : {}),
     });
   }
 
   function editFinish(value: string) {
     if (!step.actualStartedAt) return;
-    const finishedAt = clockAfter(step.actualStartedAt, value);
-    if (finishedAt) onChange({ actualFinishedAt: finishedAt, actualDurationMinutes: null });
+    const finishedAt = instantOfLocalDateTime(value);
+    if (finishedAt && Date.parse(finishedAt) >= Date.parse(step.actualStartedAt)) {
+      onChange({ actualFinishedAt: finishedAt, actualDurationMinutes: null });
+    }
   }
 
   return (
@@ -1051,7 +1013,7 @@ function StepRow({
             const value = event.target.value;
             const patch: Partial<ImplementationStepView> = { estimatedStartTime: value || null };
             if (value && step.estimatedEndTime) {
-              let start = Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
+              const start = Number(value.slice(0, 2)) * 60 + Number(value.slice(3, 5));
               let end =
                 Number(step.estimatedEndTime.slice(0, 2)) * 60 +
                 Number(step.estimatedEndTime.slice(3, 5));
@@ -1099,6 +1061,14 @@ function StepRow({
           readOnly={readOnly}
           icon={<Play className="h-3 w-3" aria-hidden />}
           onStamp={() =>
+            onChange({
+              actualStartedAt: new Date().toISOString(),
+              actualFinishedAt: null,
+              actualDurationMinutes: null,
+              status: 'IN_PROGRESS',
+            })
+          }
+          onManual={() =>
             onChange({
               actualStartedAt: new Date().toISOString(),
               actualFinishedAt: null,
@@ -1170,7 +1140,15 @@ function StepRow({
                 status: 'DONE',
               })
             }
+            onManual={() =>
+              onChange({
+                actualFinishedAt: new Date().toISOString(),
+                actualDurationMinutes: null,
+                status: 'DONE',
+              })
+            }
             onEdit={editFinish}
+            min={localDateTime(step.actualStartedAt)}
             onClear={() =>
               onChange({
                 actualFinishedAt: null,
@@ -1310,8 +1288,10 @@ function ActualCell({
   readOnly,
   icon,
   onStamp,
+  onManual,
   onEdit,
   onClear,
+  min,
 }: {
   label: string;
   value: string | null;
@@ -1319,17 +1299,30 @@ function ActualCell({
   readOnly: boolean;
   icon: ReactNode;
   onStamp: () => void;
+  onManual: () => void;
   onEdit: (value: string) => void;
   onClear: () => void;
+  min?: string;
 }) {
   if (!value) {
     return readOnly ? (
       <span className="block pt-1 text-xs text-slate-400">–</span>
     ) : (
-      <button type="button" className={STAMP_BUTTON} onClick={onStamp}>
-        {icon}
-        {label}
-      </button>
+      <div className="flex items-center gap-1">
+        <button type="button" className={STAMP_BUTTON} onClick={onStamp}>
+          {icon}
+          {label}
+        </button>
+        <button
+          type="button"
+          aria-label={`Isi ${label.toLowerCase()} aktual secara manual`}
+          title={`Isi ${label.toLowerCase()} aktual secara manual`}
+          className="rounded-md border border-slate-200 p-1 text-slate-500 transition-colors hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 dark:border-slate-700 dark:hover:border-sky-700 dark:hover:bg-sky-950/40 dark:hover:text-sky-300"
+          onClick={onManual}
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
     );
   }
 
@@ -1347,10 +1340,11 @@ function ActualCell({
     <div className="flex items-center gap-0.5">
       <input
         aria-label={`${label} aktual`}
-        type="time"
+        type="datetime-local"
         step={1}
-        className={cn(CELL_INPUT, 'w-32 tabular-nums')}
-        value={shown}
+        min={min}
+        className={cn(CELL_INPUT, 'w-48 tabular-nums')}
+        value={localDateTime(value)}
         onChange={(event) => onEdit(event.target.value)}
       />
       <button

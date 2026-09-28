@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, FileText, Paperclip, PenLine, Upload, X } from 'lucide-react';
+import { Download, FileText, Paperclip, PenLine, Trash2, Upload, X } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useRef, useState } from 'react';
 import { ApiClientError, clientFetch } from '@/lib/api/client';
@@ -19,7 +19,10 @@ import { cn } from '@/lib/utils/cn';
  */
 const PdfAnnotator = dynamic(
   () => import('./pdf/pdf-annotator').then((module) => module.PdfAnnotator),
-  { ssr: false, loading: () => <p className="py-10 text-center text-sm text-slate-500">Menyiapkan editor…</p> },
+  {
+    ssr: false,
+    loading: () => <p className="py-10 text-center text-sm text-slate-500">Menyiapkan editor…</p>,
+  },
 );
 
 interface StoredFile {
@@ -40,6 +43,43 @@ const formatSize = (bytes: number) =>
 const fileUrl = (id: string, inline: boolean) =>
   `/api/bff/workspace/files/${id}/download${inline ? '?inline=1' : ''}`;
 
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function DocxPreview({ file }: { file: StoredFile }) {
+  const { data, isPending, error } = useQuery({
+    queryKey: ['documents', 'docx-preview', file.id],
+    queryFn: async () => {
+      const response = await fetch(fileUrl(file.id, false));
+      if (!response.ok) throw new Error('Berkas DOCX gagal dimuat.');
+      const mammoth = await import('mammoth');
+      const result = await mammoth.convertToHtml({ arrayBuffer: await response.arrayBuffer() });
+      return result.value;
+    },
+  });
+
+  if (isPending) {
+    return <p className="py-10 text-center text-sm text-slate-500">Menyiapkan pratinjau DOCX...</p>;
+  }
+  if (error || data === undefined) {
+    return (
+      <p className="py-10 text-center text-sm text-red-600">
+        DOCX tidak dapat dipratinjau. Berkas tetap dapat diunduh.
+      </p>
+    );
+  }
+
+  const source = `<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#0f172a;line-height:1.55;padding:32px;max-width:900px;margin:auto}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%;margin:16px 0}td,th{border:1px solid #cbd5e1;padding:6px;vertical-align:top}h1,h2,h3{margin-top:1.4em}</style></head><body>${data}</body></html>`;
+
+  return (
+    <iframe
+      sandbox=""
+      srcDoc={source}
+      title={`Pratinjau ${file.fileName}`}
+      className="h-[70vh] w-full rounded-lg border border-slate-200 bg-white dark:border-slate-800"
+    />
+  );
+}
+
 /**
  * The files attached to a document, with PDFs shown rather than downloaded.
  *
@@ -57,9 +97,13 @@ export function DocumentFileViewer({
   documentId,
   emptyHint,
   canUpload = false,
+  templateDownload,
+  uploadLabel = 'Lampirkan dokumen',
 }: {
   documentId: string;
   canUpload?: boolean;
+  templateDownload?: { fileName: string; url: string };
+  uploadLabel?: string;
   /** Shown when there are no files. Given only when nothing else on the page
    *  would explain the emptiness — otherwise the card stays out of the way. */
   emptyHint?: string;
@@ -72,12 +116,16 @@ export function DocumentFileViewer({
   const queryClient = useQueryClient();
   const files = data?.data ?? [];
   const previewable = files.filter(
-    (file) => file.mimeType === 'application/pdf' || file.mimeType.startsWith('image/'),
+    (file) =>
+      file.mimeType === 'application/pdf' ||
+      file.mimeType.startsWith('image/') ||
+      file.mimeType === DOCX_MIME,
   );
   const fileInput = useRef<HTMLInputElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [annotating, setAnnotating] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const active = previewable.find((file) => file.id === activeId) ?? previewable[0] ?? null;
 
@@ -96,12 +144,27 @@ export function DocumentFileViewer({
       setActiveId(result.data.id);
       await queryClient.invalidateQueries({ queryKey: ['documents', documentId, 'files'] });
     } catch (caught) {
-      setUploadError(
-        caught instanceof ApiClientError ? caught.message : 'Berkas gagal diunggah.',
-      );
+      setUploadError(caught instanceof ApiClientError ? caught.message : 'Berkas gagal diunggah.');
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = '';
+    }
+  }
+
+  async function remove(file: StoredFile) {
+    if (!window.confirm(`Batalkan lampiran "${file.fileName}"?`)) return;
+    setRemovingId(file.id);
+    setUploadError(null);
+    try {
+      await clientFetch<void>(`/workspace/files/${file.id}`, { method: 'DELETE' });
+      if (activeId === file.id) setActiveId(null);
+      await queryClient.invalidateQueries({ queryKey: ['documents', documentId, 'files'] });
+    } catch (caught) {
+      setUploadError(
+        caught instanceof ApiClientError ? caught.message : 'Lampiran gagal dibatalkan.',
+      );
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -114,7 +177,7 @@ export function DocumentFileViewer({
         leftIcon={<Upload className="h-4 w-4" aria-hidden />}
         onClick={() => fileInput.current?.click()}
       >
-        Lampirkan dokumen
+        {uploadLabel}
       </Button>
       <input
         ref={fileInput}
@@ -140,13 +203,26 @@ export function DocumentFileViewer({
     return (
       <Card>
         <CardHeader
-          title="Berkas dokumen"
+          title={templateDownload ? 'Template dan dokumen hasil' : 'Berkas dokumen'}
           icon={<Paperclip className="h-4 w-4" aria-hidden />}
           tinted
         />
         <CardBody className="space-y-3 text-sm text-slate-500">
           <p>{emptyHint}</p>
-          {uploadControl}
+          <div className="flex flex-wrap gap-2">
+            {templateDownload && (
+              <a href={templateDownload.url} download={templateDownload.fileName}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leftIcon={<Download className="h-4 w-4" aria-hidden />}
+                >
+                  Download template DOCX
+                </Button>
+              </a>
+            )}
+            {uploadControl}
+          </div>
           {uploadError && <p className="text-red-600">{uploadError}</p>}
         </CardBody>
       </Card>
@@ -168,11 +244,29 @@ export function DocumentFileViewer({
       />
 
       <CardBody className="space-y-4">
+        {templateDownload && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 dark:border-sky-900 dark:bg-sky-950/30">
+            <span className="text-sm text-slate-700 dark:text-slate-200">
+              Isi template DOCX, lalu unggah hasilnya sebagai berkas dokumen.
+            </span>
+            <a href={templateDownload.url} download={templateDownload.fileName}>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Download className="h-4 w-4" aria-hidden />}
+              >
+                Download template DOCX
+              </Button>
+            </a>
+          </div>
+        )}
         {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
         <ul className="space-y-1.5">
           {files.map((file) => {
             const canPreview =
-              file.mimeType === 'application/pdf' || file.mimeType.startsWith('image/');
+              file.mimeType === 'application/pdf' ||
+              file.mimeType.startsWith('image/') ||
+              file.mimeType === DOCX_MIME;
             const isActive = active?.id === file.id;
 
             return (
@@ -211,6 +305,19 @@ export function DocumentFileViewer({
                     Unduh
                   </Button>
                 </a>
+
+                {canUpload && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={removingId === file.id}
+                    disabled={removingId !== null}
+                    leftIcon={<Trash2 className="h-4 w-4 text-red-500" aria-hidden />}
+                    onClick={() => void remove(file)}
+                  >
+                    Batalkan file
+                  </Button>
+                )}
               </li>
             );
           })}
@@ -230,12 +337,16 @@ export function DocumentFileViewer({
                 </Button>
               </div>
             )}
-            <iframe
-              key={active.id}
-              src={fileUrl(active.id, true)}
-              title={`Pratinjau ${active.fileName}`}
-              className="h-[70vh] w-full rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800"
-            />
+            {active.mimeType === DOCX_MIME ? (
+              <DocxPreview file={active} />
+            ) : (
+              <iframe
+                key={active.id}
+                src={fileUrl(active.id, true)}
+                title={`Pratinjau ${active.fileName}`}
+                className="h-[70vh] w-full rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800"
+              />
+            )}
           </>
         )}
 

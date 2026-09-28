@@ -28,6 +28,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { ProjectTeamService } from './project-team.service.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
+import { ProjectStageService } from './project-stage.service.js';
 
 const SORTABLE_FIELDS = ['updatedAt', 'createdAt', 'title', 'status', 'stage'] as const;
 
@@ -82,6 +83,7 @@ export class WorkspaceService {
     private readonly access: WorkspaceAccessService,
     private readonly team: ProjectTeamService,
     private readonly auditService: AuditService,
+    private readonly projectStage: ProjectStageService,
   ) {}
 
   /* ------------------------------------------------------------------ */
@@ -145,9 +147,8 @@ export class WorkspaceService {
             code: project.code,
             stage: project.stage as ProjectStage,
             status: project.status as ProjectStatus,
-            documentCount: project.documents.filter(
-              (document) => !restricted.has(document.id),
-            ).length,
+            documentCount: project.documents.filter((document) => !restricted.has(document.id))
+              .length,
             updatedAt: project.updatedAt.toISOString(),
             // Documents hang under their project in the sidebar as well as in
             // the Project Space: the tree is how people navigate to one
@@ -193,9 +194,7 @@ export class WorkspaceService {
     // The node filter is intersected with what the caller may read, never
     // substituted for it: passing `?nodeId=` for a node you have no grant on
     // must narrow the result to nothing, not widen it.
-    const nodeIds = query.nodeId
-      ? readable.filter((nodeId) => nodeId === query.nodeId)
-      : readable;
+    const nodeIds = query.nodeId ? readable.filter((nodeId) => nodeId === query.nodeId) : readable;
 
     const restricted = await this.team.restrictedDocumentIds(actor.id);
 
@@ -309,11 +308,7 @@ export class WorkspaceService {
    * capability as editing one — someone who may rename a checklist entry may
    * also decide it does not apply to this project.
    */
-  async removeDocument(
-    id: string,
-    actor: AuthenticatedUser,
-    client: ClientInfo,
-  ): Promise<void> {
+  async removeDocument(id: string, actor: AuthenticatedUser, client: ClientInfo): Promise<void> {
     const nodeId = await this.access.nodeIdOfDocument(id);
     await this.access.requireCapability(actor.id, actor.role as Role, nodeId, 'createDocument');
 
@@ -340,6 +335,8 @@ export class WorkspaceService {
       before,
       after,
     });
+
+    await this.projectStage.sync(before.projectId);
   }
 
   async updateDocument(
@@ -357,9 +354,7 @@ export class WorkspaceService {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.stage !== undefined ? { stage: input.stage as ProjectStage } : {}),
         ...(input.status !== undefined ? { status: input.status as DocumentStatus } : {}),
-        ...(input.content !== undefined
-          ? { content: input.content as Prisma.InputJsonValue }
-          : {}),
+        ...(input.content !== undefined ? { content: input.content as Prisma.InputJsonValue } : {}),
       },
       select: DOCUMENT_SELECT,
     });
@@ -374,6 +369,8 @@ export class WorkspaceService {
       userAgent: client.userAgent,
       metadata: { changes: Object.keys(input) },
     });
+
+    await this.projectStage.sync(row.projectId);
 
     const [favouriteIds, ancestry] = await Promise.all([
       this.favouriteIds(actor.id),
@@ -421,7 +418,8 @@ export class WorkspaceService {
       where: { nodeId_code: { nodeId: input.nodeId, code: input.code } },
       select: { id: true },
     });
-    if (clash) throw AppException.conflict(`Kode project "${input.code}" sudah dipakai di node ini`);
+    if (clash)
+      throw AppException.conflict(`Kode project "${input.code}" sudah dipakai di node ini`);
 
     const project = await this.prisma.project.create({
       data: {
@@ -492,9 +490,7 @@ export class WorkspaceService {
         position,
         title: entry.title,
         screen: entry.screen ?? null,
-        templateId: entry.templateCode
-          ? (templateIdByCode.get(entry.templateCode) ?? null)
-          : null,
+        templateId: entry.templateCode ? (templateIdByCode.get(entry.templateCode) ?? null) : null,
         // Owned by whoever created the project, exactly as a hand-made document
         // is owned by whoever created it. A seeded row with no owner reads as a
         // row nobody is responsible for, which is not what it means.
@@ -535,7 +531,6 @@ export class WorkspaceService {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.code !== undefined ? { code: input.code } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.stage !== undefined ? { stage: input.stage as ProjectStage } : {}),
         ...(input.status !== undefined ? { status: input.status as ProjectStatus } : {}),
         ...(input.startsAt !== undefined
           ? { startsAt: input.startsAt ? new Date(input.startsAt) : null }
@@ -573,11 +568,7 @@ export class WorkspaceService {
    * node can reuse it — the unique `(nodeId, code)` pair would otherwise hold it
    * forever — and the original stays in the audit record's `before`.
    */
-  async removeProject(
-    id: string,
-    actor: AuthenticatedUser,
-    client: ClientInfo,
-  ): Promise<void> {
+  async removeProject(id: string, actor: AuthenticatedUser, client: ClientInfo): Promise<void> {
     // Also answers 404 for a project already deleted.
     const nodeId = await this.access.nodeIdOfProject(id);
     await this.access.requireCapability(actor.id, actor.role as Role, nodeId, 'viewProject');

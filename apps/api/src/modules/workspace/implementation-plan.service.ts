@@ -20,6 +20,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
+import { ProjectStageService } from './project-stage.service.js';
 
 /** The whole plan row, on both sides of a save. */
 const AUDIT_SELECT = {
@@ -49,6 +50,7 @@ export class ImplementationPlanService {
     private readonly prisma: PrismaService,
     private readonly access: WorkspaceAccessService,
     private readonly audit: AuditService,
+    private readonly projectStage: ProjectStageService,
   ) {}
 
   async get(projectId: string, actor: AuthenticatedUser): Promise<ImplementationPlanView> {
@@ -171,6 +173,8 @@ export class ImplementationPlanService {
       after: pickAudit(row),
     });
 
+    await this.projectStage.sync(projectId);
+
     return this.toView(row);
   }
 
@@ -203,7 +207,9 @@ export class ImplementationPlanService {
         : null,
       startTime: row.startTime,
       hosts: (Array.isArray(row.hosts) ? row.hosts : []) as unknown as ImplementationHostView[],
-      phases: (Array.isArray(row.content) ? row.content : []) as unknown as ImplementationPhaseView[],
+      phases: (Array.isArray(row.content)
+        ? row.content
+        : []) as unknown as ImplementationPhaseView[],
       status: row.status as ImplementationPlanStatus,
       completedAt: row.completedAt?.toISOString() ?? null,
       completedByName: await this.nameOf(row.completedById),
