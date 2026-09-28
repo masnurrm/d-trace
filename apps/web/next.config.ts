@@ -26,6 +26,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
+  // Self-contained server bundle for the Docker image (deploy/docker) — a
+  // fraction of the size of shipping the full node_modules tree. Has no
+  // effect on `next start` from the plain build the native systemd deploy
+  // (deploy/setup-vm.sh) uses.
+  output: 'standalone',
+
   // The server sends JSON envelopes, not a framework fingerprint.
   poweredByHeader: false,
 

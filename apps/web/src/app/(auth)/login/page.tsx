@@ -4,10 +4,8 @@ import { LoginForm } from '@/components/auth/login-form';
 import { Card } from '@/components/ui/card';
 
 export const metadata: Metadata = { title: 'Masuk' };
-// Statically prerendering this page would bake its CSP nonce in at build
-// time, while proxy.ts issues a fresh nonce on every request — the two can
-// never match again, and every script on the page gets silently blocked.
-export const dynamic = 'force-dynamic';
+// See app/layout.tsx — the root layout is already force-dynamic, which
+// this inherits.
 
 export default function LoginPage() {
   return (

@@ -1,0 +1,19 @@
+**/node_modules
+**/dist
+**/.next
+**/.next.stale-*
+**/coverage
+**/.turbo
+**/.eslintcache
+# A host-built tsbuildinfo carried into the image tricks tsc's incremental
+# check into a no-op "up to date" exit 0 without ever writing dist/ fresh.
+**/*.tsbuildinfo
+.git
+.vscode
+.idea
+**/*.env
+**/*.env.*
+!**/*.env.example
+!**/*.env.*.example
+apps/api/storage
+deploy

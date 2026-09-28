@@ -1,3 +1,10 @@
 # Shell scripts must stay LF, no matter what a Windows clone's core.autocrlf
 # does — a CRLF shebang line is a "bad interpreter" error on the VM.
 *.sh text eol=lf
+
+# Same reasoning for anything Docker parses as a script — a CRLF inside a
+# Dockerfile RUN heredoc breaks silently rather than erroring cleanly.
+Dockerfile text eol=lf
+*.dockerfile text eol=lf
+docker-compose.yml text eol=lf
+.dockerignore text eol=lf

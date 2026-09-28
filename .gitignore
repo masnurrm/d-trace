@@ -46,3 +46,10 @@ Desktop.ini
 
 # Uploaded document files; content, never source.
 apps/api/storage/
+
+# deploy/docker — generated at setup time: secrets, certs, resolved nginx
+# config. The Dockerfiles, docker-compose.yml and the two setup/redeploy
+# scripts themselves ARE tracked (not covered by these).
+deploy/docker/env/
+deploy/docker/certs/
+deploy/docker/nginx/conf.d/

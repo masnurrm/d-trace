@@ -4,9 +4,8 @@ import { RegisterForm } from '@/components/auth/register-form';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 
 export const metadata: Metadata = { title: 'Daftar' };
-// See login/page.tsx: a statically prerendered page's CSP nonce is fixed at
-// build time and can never match proxy.ts's per-request nonce.
-export const dynamic = 'force-dynamic';
+// See app/layout.tsx — the root layout is already force-dynamic, which
+// this inherits.
 
 export default function RegisterPage() {
   return (

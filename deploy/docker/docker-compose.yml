@@ -1,0 +1,81 @@
+name: dtrace
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: ./env/postgres.env
+    volumes:
+      - dtrace-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    # Never published — only reachable from other containers on this network.
+
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/api.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - dtrace-api-storage:/app/storage
+    networks: [internal]
+    # Not published — only nginx (and, on the host, curl for debugging via
+    # `docker compose exec`) reaches it, matching the native deploy's
+    # 127.0.0.1-only binding.
+
+  web:
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file: ./env/web.env
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [internal]
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./certs:/etc/nginx/certs:ro
+      - certbot-webroot:/var/www/certbot:ro
+    depends_on:
+      web:
+        condition: service_started
+      api:
+        condition: service_started
+    networks: [internal]
+
+  # Only used when TLS_MODE=letsencrypt — renews the cert every 12h if due,
+  # otherwise sleeps. A no-op container the rest of the time (selfsigned/none
+  # never mount a webroot certbot can write to, so it has nothing to renew).
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - ./certs:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    entrypoint: >
+      sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+    profiles: [letsencrypt]
+
+networks:
+  internal:
+
+volumes:
+  dtrace-postgres-data:
+  dtrace-api-storage:
+  certbot-webroot:
